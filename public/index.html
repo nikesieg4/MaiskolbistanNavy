@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MaiskolbistanNavy</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%231a4f78'/%3E%3Cpath d='M8 34 L48 30 L58 34 L48 38 Z' fill='%23c3cacf'/%3E%3Ccircle cx='36' cy='34' r='4' fill='%23f4c430'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" hidden>
+    <div id="topleft" class="panel">
+      <div class="boat-name" id="boatLabel">Schnellboot Gepard</div>
+      <div class="row"><span>Fahrt</span><b id="speed">0.0 kn</b></div>
+      <div class="row"><span>Kurs</span><b id="heading">000°</b></div>
+      <div class="row"><span>Position</span><b id="pos">0 / 0</b></div>
+      <div class="row small"><span>Ping</span><b id="ping">–</b></div>
+    </div>
+
+    <div id="players" class="panel">
+      <div class="title">Flotte <span id="pcount">0</span></div>
+      <ol id="plist"></ol>
+    </div>
+
+    <div id="telegraph" class="panel">
+      <div class="title">Maschine</div>
+      <div class="tg-scale">
+        <div class="tg-marks">
+          <span style="top:0">Voll</span><span style="top:38.5%">Halb</span><span style="top:76.9%">Stopp</span><span style="top:100%">Zurück</span>
+        </div>
+        <div class="tg-bar"><div id="tgZero"></div><div id="tgFill"></div><div id="tgActual"></div></div>
+      </div>
+      <div class="title" style="margin-top:8px">Ruder</div>
+      <div class="rudder"><div id="rudderNeedle"></div></div>
+    </div>
+
+    <canvas id="minimap" width="200" height="200" class="panel"></canvas>
+
+    <div id="help" class="panel">
+      <b>W/S</b> Fahrstufe &nbsp; <b>A/D</b> Ruder &nbsp; <b>Leertaste</b> Stopp &nbsp; <b>Mausrad</b> Zoom
+    </div>
+  </div>
+
+  <div id="menu">
+    <div class="card">
+      <h1><span class="corn">🌽</span> Maiskolbistan<span>Navy</span></h1>
+      <p class="sub">Multiplayer-Seegefecht · Level 1</p>
+      <canvas id="preview" width="560" height="150"></canvas>
+      <div class="boat-info">
+        <b>Schnellboot Klasse 143A „Gepard“</b>
+        <span>57,6 m · 40 kn · 76-mm-Geschütz · Exocet · RAM</span>
+      </div>
+      <form id="joinForm">
+        <input id="name" maxlength="16" placeholder="Dein Name" autocomplete="off" />
+        <button id="play" type="submit">Ablegen!</button>
+      </form>
+      <p id="status" class="status"></p>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

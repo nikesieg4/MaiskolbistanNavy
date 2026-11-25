@@ -1,0 +1,17 @@
+name = "maiskolbistan-navy"
+main = "src/worker.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+preview_urls = false
+
+[build]
+command = "node scripts/build-assets.mjs"
+watch_dir = "public"
+
+[[durable_objects.bindings]]
+name = "WORLD"
+class_name = "World"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["World"]
