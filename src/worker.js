@@ -3,6 +3,7 @@ import {
   DT,
   BOATS,
   WEAPONS,
+  ABILITIES,
   PROJ,
   WORLD_SIZE,
   generateMap,
@@ -25,7 +26,7 @@ const MAX_QUEUE = 6;
 const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
-const WORLD_VERSION = 3;
+const WORLD_VERSION = 4;
 
 export default {
   async fetch(request, env) {
@@ -117,6 +118,8 @@ export class World {
         }
       } else if (msg.t === "fire") {
         this.fire(player, msg.w);
+      } else if (msg.t === "ability") {
+        this.ability(player, msg.a);
       } else if (msg.t === "lock") {
         this.lock(player, +msg.x, +msg.y);
       }
@@ -164,6 +167,8 @@ export class World {
       ramCd: 0,
       lockId: 0,
       lockT: 0,
+      radarT: 0, // verbleibende Radar-Fähigkeit (s)
+      radarCd: 0, // Abklingzeit (s)
     };
   }
 
@@ -240,11 +245,21 @@ export class World {
     return pr;
   }
 
+  ability(p, a) {
+    if (a !== "radar") return;
+    const A = ABILITIES.radar;
+    if (p.radarCd > 0 || p.radarT > 0) return;
+    p.radarT = A.duration;
+    p.radarCd = A.duration + A.cooldown;
+  }
+
   lock(p, x, y) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const L = WEAPONS.lock;
+    const radar = p.radarT > 0;
+    const range = radar ? ABILITIES.radar.lockRange : L.range;
     let best = null;
-    let bestD = L.pick;
+    let bestD = radar ? ABILITIES.radar.pick : L.pick;
     for (const o of this.players.values()) {
       if (o === p) continue;
       let d = Infinity;
@@ -262,8 +277,8 @@ export class World {
       this.send(p.ws, { t: "lockmsg", m: had ? "AGIS: Ziel freigegeben" : "AGIS: kein Schiff am Zeiger" });
       return;
     }
-    if (Math.hypot(best.b.x - p.b.x, best.b.y - p.b.y) > L.range) {
-      this.send(p.ws, { t: "lockmsg", m: "AGIS: Ziel außerhalb der Radarreichweite" });
+    if (Math.hypot(best.b.x - p.b.x, best.b.y - p.b.y) > range) {
+      this.send(p.ws, { t: "lockmsg", m: radar ? "AGIS: Ziel außerhalb 5 km" : "AGIS: außer Reichweite – Radar (E) nutzen" });
       return;
     }
     p.lockId = best.id;
@@ -321,6 +336,8 @@ export class World {
         }
       } else p.ramReload = 0;
       p.protect = Math.max(0, p.protect - DT);
+      p.radarT = Math.max(0, p.radarT - DT);
+      p.radarCd = Math.max(0, p.radarCd - DT);
       // AGIS-Lock
       if (p.lockId) {
         const t = this.players.get(p.lockId);
@@ -358,6 +375,7 @@ export class World {
       p.kills,
       Math.ceil(p.hp),
       p.protect > 0 ? 1 : 0,
+      p.radarT > 0 ? 1 : 0,
     ]);
     const proj = this.projectiles.map((q) => [q.id, q.type, r(q.x, 10), r(q.y, 10), r(q.h)]);
     const ev = this.events.map((e) => e.map((v) => (typeof v === "number" ? r(v, 10) : v)));
@@ -377,6 +395,8 @@ export class World {
           rr: r(p.ramReload / WEAPONS.ram.reload),
           l: p.lockId,
           lt: r(p.lockT / WEAPONS.lock.time),
+          ra: r(p.radarT, 10),
+          rc: r(p.radarCd, 10),
         },
       });
     }

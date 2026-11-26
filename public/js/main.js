@@ -12,7 +12,9 @@ import {
   aimAngles,
   slewTurret,
   WEAPONS,
+  ABILITIES,
 } from "../shared/sim.js";
+import * as radar from "./radar.js";
 import { drawGepard, GEPARD_EXHAUSTS } from "./gepard.js";
 import * as combat from "./combat.js";
 
@@ -51,6 +53,10 @@ const state = {
   lockMsg: "",
   lockMsgT: 0,
   lastFire: 0,
+  radarK: 0, // Einblendung der Radaransicht 0..1
+  radarStart: -10, // Zeitpunkt der Aktivierung (s)
+  radarWasOn: false,
+  radarView: null, // Geometrie der Radaransicht (für Klick-Lock)
 };
 const WEAPON_KEYS = { 1: "gun", 2: "exocet", 3: "ram" };
 
@@ -149,7 +155,8 @@ addEventListener("keydown", (e) => {
   if (k === " " || k === "x") state.throttle = 0;
   if (WEAPON_KEYS[k]) selectWeapon(WEAPON_KEYS[k]);
   if (!e.repeat && k === "f" && state.weapon !== "gun") send({ t: "fire", w: state.weapon });
-  if (!e.repeat && k === "r" && state.pred) send({ t: "lock", x: Math.round(state.mouseWorld.x), y: Math.round(state.mouseWorld.y) });
+  if (!e.repeat && k === "r" && state.pred) sendLock();
+  if (!e.repeat && k === "e") activateRadar();
   if (["w", "a", "s", "d", " ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) e.preventDefault();
 });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
@@ -159,7 +166,7 @@ document.addEventListener("mouseleave", () => (state.mouse = null));
 addEventListener(
   "wheel",
   (e) => {
-    if (!state.playing) return;
+    if (!state.playing || state.radarK > 0) return;
     state.zoom = clamp(state.zoom * Math.pow(1.0015, -e.deltaY), 0.6, 9);
   },
   { passive: true }
@@ -168,6 +175,25 @@ addEventListener(
 function send(obj) {
   if (state.ws && state.ws.readyState === 1 && state.pred && !state.dead) state.ws.send(JSON.stringify(obj));
 }
+
+function sendLock() {
+  // In der Radaransicht auf den Kontakt unter dem Zeiger einrasten
+  const rv = state.radarView;
+  const hov = rv && state.radarK > 0.5 ? radar.hoveredContact(rv, state.mouse) : null;
+  const target = hov || state.mouseWorld;
+  send({ t: "lock", x: Math.round(target.x), y: Math.round(target.y) });
+}
+
+function activateRadar() {
+  const info = state.meInfo;
+  if (info && (info.ra > 0 || info.rc > 0)) return;
+  send({ t: "ability", a: "radar" });
+}
+
+canvas.addEventListener("mousedown", (e) => {
+  if (e.button === 0 && state.radarK > 0.5 && state.pred) sendLock();
+});
+$("abRadar").addEventListener("click", activateRadar);
 
 function selectWeapon(w) {
   state.weapon = w;
@@ -380,6 +406,7 @@ function interpolatedBoats(br) {
       th: pb[6],
       aim: pb[8] ?? 0,
       ramAim: pb[9] ?? 0,
+      radar: pb[13] === 1,
       hp: pb[11] ?? 100,
       prot: pb[12] === 1,
     });
@@ -646,6 +673,7 @@ function render(now) {
       th: state.throttle,
       hp: state.myHp ?? 100,
       prot: state.myProt,
+      radar: !!(state.meInfo && state.meInfo.ra > 0),
     };
   }
   const br = bracket(now);
@@ -656,7 +684,18 @@ function render(now) {
   state.lastRender = now;
 
   const cam = me || state.dead || { x: 0, y: 0 };
-  const zoom = state.zoom * Math.min(1.25, Math.max(0.7, Math.min(w, h) / 900));
+  // Radar-Rundumsuche: weich weit herauszoomen
+  const radarOn = !!(me && state.meInfo && state.meInfo.ra > 0);
+  if (radarOn && !state.radarWasOn) {
+    state.radarStart = t;
+    radar.resetContacts();
+  }
+  state.radarWasOn = radarOn;
+  state.radarK = clamp(state.radarK + (radarOn ? 1 : -1) * (dtFx / 0.9), 0, 1);
+  const rk = state.radarK * state.radarK * (3 - 2 * state.radarK); // smoothstep
+  const normalZoom = state.zoom * Math.min(1.25, Math.max(0.7, Math.min(w, h) / 900));
+  const radarZoom = (Math.min(w, h) * 0.5 - 50) / ABILITIES.radar.lockRange;
+  const zoom = Math.exp(lerp(Math.log(normalZoom), Math.log(radarZoom), rk));
   const scale = zoom * dpr;
   const view = {
     x0: cam.x - w / 2 / zoom,
@@ -726,7 +765,11 @@ function render(now) {
     // Spawnschutz: Boot blinkt
     if (b.prot) ctx.globalAlpha = 0.55 + Math.sin(t * 10) * 0.25;
     const exo = b.id === state.myId && info ? info.x.map((v) => v <= 0) : undefined;
-    drawGepard(ctx, { t, seed: b.id * 7919, gun: tu.gun, ram: tu.ram, exo });
+    // Navigationsradar dreht bei Rundumsuche schneller
+    const fb = fxFor(b.id);
+    fb.navAng = (fb.navAng ?? (b.id * 1.7) % 6.28) + dtFx * (b.radar ? 9 : 2.6);
+    fb.domeAng = (fb.domeAng ?? 0) + dtFx * (b.radar ? 3 : 0.45);
+    drawGepard(ctx, { t, seed: b.id * 7919, gun: tu.gun, ram: tu.ram, exo, radarAngle: fb.navAng, domeAngle: fb.domeAng });
     ctx.restore();
     combat.damageFx(b, dtFx);
   }
@@ -735,14 +778,24 @@ function render(now) {
   combat.drawEffectsAbove(ctx);
 
   // AGIS-Lock
-  if (me && info && info.l) {
+  if (me && info && info.l && rk < 0.5) {
     const tgt = others.find((o) => o.id === info.l);
     if (tgt) combat.drawLock(ctx, me, tgt, info.lt, t);
   }
 
   // Namen (Bildschirmkoordinaten)
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  for (const b of boats) {
+  if (me) radar.updateContacts(me, others, t);
+  state.radarView = null;
+  if (me && rk > 0.01) {
+    state.radarView = {
+      w, h, cx: w / 2, cy: h / 2, zoom, k: rk, t, startT: state.radarStart, me, others,
+      lockId: info ? info.l : 0, lockT: info ? info.lt : 0, names: state.names,
+      lockRange: ABILITIES.radar.lockRange, mouse: state.mouse,
+    };
+    radar.drawRadar(ctx, state.radarView);
+  }
+  if (rk < 0.6) for (const b of boats) {
     const sx = w / 2 + (b.x - cam.x) * zoom;
     const sy = h / 2 + (b.y - cam.y) * zoom - Math.max(24, DEF.length * 0.55 * zoom);
     drawNameTag(state.names.get(b.id) || "?", sx, sy - 8, b.id === state.myId);
@@ -800,6 +853,7 @@ let hudTick = 0;
 function updateHud(me) {
   if (++hudTick % 4) return;
   updateWeaponBar();
+  updateRadarHud();
   $("hpFill").style.width = `${clamp(me.hp / DEF.hp, 0, 1) * 100}%`;
   $("hpText").textContent = `${Math.max(0, Math.ceil(me.hp))} / ${DEF.hp}`;
   $("speed").textContent = `${(me.v * MS_TO_KN).toFixed(1)} kn`;
@@ -851,6 +905,33 @@ function updateWeaponBar() {
   $("exoMode").textContent = info.l && info.lt >= 1 ? "→ Lock-Ziel" : "→ Mauszeiger";
 }
 
+function updateRadarHud() {
+  const info = state.meInfo;
+  if (!info) return;
+  const A = ABILITIES.radar;
+  const slot = $("abRadar");
+  const banner = $("radarBanner");
+  if (info.ra > 0) {
+    $("radarState").textContent = `aktiv ${info.ra.toFixed(1)} s`;
+    $("radarBar").style.width = `${(info.ra / A.duration) * 100}%`;
+    slot.className = "aslot active";
+    banner.hidden = false;
+    $("radarTime").textContent = `${info.ra.toFixed(1)} s`;
+    $("radarBannerBar").style.width = `${(info.ra / A.duration) * 100}%`;
+  } else {
+    banner.hidden = true;
+    if (info.rc > 0) {
+      $("radarState").textContent = `lädt ${Math.ceil(info.rc)} s`;
+      $("radarBar").style.width = `${(1 - info.rc / A.cooldown) * 100}%`;
+      slot.className = "aslot cooldown";
+    } else {
+      $("radarState").textContent = "bereit";
+      $("radarBar").style.width = "100%";
+      slot.className = "aslot ready";
+    }
+  }
+}
+
 function renderPlayerList() {
   const ol = $("plist");
   ol.replaceChildren();
@@ -898,11 +979,68 @@ function drawMinimap(me, others) {
   mctx.drawImage(mmBase, 0, 0, W, W);
   const s = W / WORLD_SIZE;
   const toM = (x) => W / 2 + x * s;
-  mctx.fillStyle = "#ffffff";
+  const info = state.meInfo;
+  const t = performance.now() / 1000;
+  // Radar-Rundumsuche: Reichweitenkreis und Strahl
+  if (me && info && info.ra > 0) {
+    const R = ABILITIES.radar.lockRange * s;
+    const a = radar.sweepAngle(t);
+    mctx.fillStyle = "rgba(0,40,20,0.35)";
+    mctx.strokeStyle = "rgba(90,255,150,0.7)";
+    mctx.lineWidth = 1;
+    mctx.beginPath();
+    mctx.arc(toM(me.x), toM(me.y), R, 0, Math.PI * 2);
+    mctx.fill();
+    mctx.stroke();
+    mctx.strokeStyle = "rgba(140,255,180,0.95)";
+    mctx.beginPath();
+    mctx.moveTo(toM(me.x), toM(me.y));
+    mctx.lineTo(toM(me.x) + Math.cos(a) * R, toM(me.y) + Math.sin(a) * R);
+    mctx.stroke();
+  }
+  const lockId = info ? info.l : 0;
   for (const o of others) {
+    if (o.id === lockId) continue;
+    mctx.fillStyle = "#ffffff";
     mctx.beginPath();
     mctx.arc(toM(o.x), toM(o.y), 2.5, 0, Math.PI * 2);
     mctx.fill();
+  }
+  // Gelocktes Ziel: rot mit Klammern und Peillinie (gelb während der Aufschaltung)
+  const lt = lockId ? others.find((o) => o.id === lockId) : null;
+  if (lt) {
+    const locked = info.lt >= 1;
+    const col = locked ? "#ff4b3e" : "#ffd75e";
+    const x = toM(lt.x);
+    const y = toM(lt.y);
+    if (me) {
+      mctx.strokeStyle = locked ? "rgba(255,75,62,0.6)" : "rgba(255,215,94,0.6)";
+      mctx.setLineDash([3, 3]);
+      mctx.lineWidth = 1;
+      mctx.beginPath();
+      mctx.moveTo(toM(me.x), toM(me.y));
+      mctx.lineTo(x, y);
+      mctx.stroke();
+      mctx.setLineDash([]);
+    }
+    mctx.fillStyle = col;
+    mctx.beginPath();
+    mctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    mctx.fill();
+    mctx.strokeStyle = col;
+    mctx.lineWidth = 1.5;
+    const r = 8 + (locked ? Math.sin(t * 8) : 0) * 1.5;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      mctx.beginPath();
+      mctx.moveTo(x + sx * r, y + sy * (r - 4));
+      mctx.lineTo(x + sx * r, y + sy * r);
+      mctx.lineTo(x + sx * (r - 4), y + sy * r);
+      mctx.stroke();
+    }
+    mctx.font = "700 10px system-ui, sans-serif";
+    mctx.textAlign = x > W - 70 ? "right" : "left";
+    mctx.textBaseline = "middle";
+    mctx.fillText(state.names.get(lt.id) || "?", x + (x > W - 70 ? -12 : 12), y);
   }
   if (me) {
     mctx.save();

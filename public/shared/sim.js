@@ -69,9 +69,21 @@ export const WEAPONS = {
   },
   lock: {
     range: 3000, // Radar-Erfassungsreichweite
-    breakRange: 3500,
+    breakRange: 5500, // ein Lock hält bis hierhin (auch nach Ende der Radar-Fähigkeit)
     time: 1.2, // s bis zur Aufschaltung
     pick: 140, // m um den Mauszeiger
+  },
+};
+
+// Fähigkeiten (Taste E)
+export const ABILITIES = {
+  radar: {
+    label: "Radar-Rundumsuche",
+    duration: 10, // s aktiv
+    cooldown: 30, // s Abklingzeit nach Ende
+    lockRange: 5000, // erweiterte Lock-Reichweite während aktiv
+    pick: 380, // größerer Fangradius am Mauszeiger (weit herausgezoomt)
+    viewRange: 5200, // sichtbarer Radius in der Radaransicht
   },
 };
 

@@ -625,8 +625,8 @@ export function drawGepard(ctx, anim) {
   const ph = (s % 1000) / 159;
 
   // Bewegungen der Teile
-  const radarAngle = t * 2.6 + ph; // ~25 U/min
-  const domeAngle = t * 0.45 + ph * 2;
+  const radarAngle = anim.radarAngle ?? t * 2.6 + ph; // ~25 U/min, bei Rundumsuche schneller
+  const domeAngle = anim.domeAngle ?? t * 0.45 + ph * 2;
   // Turm: vom Spieler gerichtet (anim.gun), sonst Suchbewegung (z. B. Menüvorschau)
   const gunAngle = anim.gun ?? Math.sin(t * 0.21 + ph) * 1.25 + Math.sin(t * 0.53 + ph * 1.7) * 0.35;
   const ramAngle = Math.PI + (anim.ram ?? Math.sin(t * 0.17 + ph * 3) * 1.4);

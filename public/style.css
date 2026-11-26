@@ -34,6 +34,21 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0d2f4d; col
   background: rgba(255,255,255,.04); cursor: pointer; font-size: 12px; }
 .wslot.sel { border-color: #ffd75e; background: rgba(255,215,94,.12); box-shadow: 0 0 0 1px #ffd75e inset; }
 .agis { cursor: default; width: 150px; }
+.aslot { position: relative; width: 118px; padding: 6px 8px 8px; border-radius: 8px; cursor: pointer; font-size: 12px;
+  border: 1px solid rgba(90,255,150,.35); background: rgba(90,255,150,.06); }
+.aslot .wbar div { background: #5aff96; }
+.aslot.ready { box-shadow: 0 0 10px rgba(90,255,150,.25) inset; }
+.aslot.active { border-color: #5aff96; background: rgba(90,255,150,.18); animation: pulse 1s ease-in-out infinite; }
+.aslot.cooldown { opacity: .6; cursor: default; }
+.aslot.cooldown .wbar div { background: rgba(90,255,150,.5); }
+@keyframes pulse { 50% { box-shadow: 0 0 16px rgba(90,255,150,.55); } }
+#radarBanner { top: 160px; left: 14px; text-align: left; color: #9dffc0;
+  font-family: ui-monospace, Menlo, monospace; text-shadow: 0 0 8px rgba(90,255,150,.6); pointer-events: none; }
+#radarBanner[hidden] { display: none; }
+.rb-title { font-size: 15px; font-weight: 800; letter-spacing: .12em; }
+.rb-sub { font-size: 12px; opacity: .85; margin-top: 2px; } .rb-sub b { color: #fff; }
+.rb-bar { width: 220px; height: 4px; margin: 6px 0 0; background: rgba(90,255,150,.2); border-radius: 2px; overflow: hidden; }
+#radarBannerBar { height: 100%; width: 100%; background: #5aff96; box-shadow: 0 0 6px #5aff96; }
 kbd { position: absolute; top: 5px; right: 6px; font: 700 10px system-ui; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.15); }
 .wicon { width: 48px; height: 24px; display: block; }
 .wname { font-weight: 700; margin-top: 2px; } .wname span { font-weight: 400; opacity: .8; }
