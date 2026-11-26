@@ -49,6 +49,8 @@ export const BOATS = {
     typeId: 4, team: 0, kind: "ship", level: 3, price: 12000,
     label: "Fregatte Sachsen (F124)", short: "Fregatte Sachsen",
     weapons: ["gun76", "harpoon", "sm2", "ram"], ability: "radar",
+    // ein Landedeck am Heck = ein Hubschrauber
+    heliType: "nh90", heliSpots: [{ x: -61.5, y: 0 }],
     length: 143, beam: 17.4, maxSpeed: 14.9, maxReverse: 0.3, accel: 1.1, decel: 1.6, turnRate: 0.14,
     gun: { x: 52, arc: 150 * DEG, speed: 1.4 },
     ram: { x: -40, arc: 150 * DEG, speed: 1.8 },
@@ -62,7 +64,7 @@ export const BOATS = {
   carrier: {
     typeId: 1, team: 0, kind: "ship", level: 2, price: 6000,
     label: "Hubschrauberträger Klasse Ähre", short: "Hubschrauberträger Ähre",
-    weapons: ["ram"], ability: "radar", heliType: "nh90", drawScale: 1,
+    weapons: ["ram"], ability: "radar", heliType: "nh90", carrier: true, drawScale: 1,
     length: 182, beam: 30, maxSpeed: 10.3, maxReverse: 0.25, accel: 0.7, decel: 1.0, turnRate: 0.085,
     ram: { x: -84, arc: 150 * DEG, speed: 1.6 },
     mags: { ram: 42 },
@@ -105,6 +107,7 @@ export const BOATS = {
     typeId: 8, team: 1, kind: "ship", level: 2, price: 4000,
     label: "Littoral Combat Ship Independence", short: "LCS Independence",
     weapons: ["gun57", "nsm", "searam"], ability: "radar",
+    heliType: "blackhawk", heliSpots: [{ x: -39, y: 0 }],
     length: 127, beam: 31.6, maxSpeed: 20.6, maxReverse: 0.3, accel: 1.6, decel: 2.2, turnRate: 0.15,
     gun: { x: 44, arc: 150 * DEG, speed: 1.8 },
     ram: { x: 12, arc: 150 * DEG, speed: 1.8 },
@@ -118,6 +121,7 @@ export const BOATS = {
     typeId: 9, team: 1, kind: "ship", level: 3, price: 12000,
     label: "Zerstörer Arleigh Burke (DDG-51)", short: "Zerstörer Arleigh Burke",
     weapons: ["gun127", "harpoon", "sm2"], ability: "radar",
+    heliType: "blackhawk", heliSpots: [{ x: -69.5, y: 0 }],
     length: 155, beam: 20, maxSpeed: 15.4, maxReverse: 0.3, accel: 1.1, decel: 1.6, turnRate: 0.13,
     gun: { x: 58, arc: 150 * DEG, speed: 1.2 },
     vls: { x: 44, y: 0 },
@@ -131,7 +135,7 @@ export const BOATS = {
   america: {
     typeId: 10, team: 1, kind: "ship", level: 2, price: 6000,
     label: "Amphibisches Angriffsschiff America (LHA-6)", short: "USS-Klasse America",
-    weapons: ["searam"], ability: "radar", heliType: "blackhawk", drawScale: [1.4, 1.2],
+    weapons: ["searam"], ability: "radar", heliType: "blackhawk", carrier: true, drawScale: [1.4, 1.2],
     length: 257, beam: 36, maxSpeed: 11.3, maxReverse: 0.25, accel: 0.6, decel: 0.9, turnRate: 0.07,
     ram: { x: -118, arc: 150 * DEG, speed: 1.6 },
     mags: { searam: 22 },
@@ -173,7 +177,7 @@ export const ECONOMY = {
   bounty(def) {
     if (def.kind === "drone") return 400;
     if (def.kind === "heli") return 600;
-    if (def.heliSpots) return 3000;
+    if (def.carrier) return 3000;
     return [0, 1000, 1800, 3000][def.level] || 1000;
   },
   assistShare: 0.4,

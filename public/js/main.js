@@ -1973,16 +1973,26 @@ function renderSpawnOptions() {
   const st = state.status;
   const team = state.team;
   const owned = st && st.account ? st.account.owned : START_SHIP;
-  const carriers = st ? st.teams[team].carriers.filter((c) => c.free > 0) : [];
+  const carriers = st ? st.teams[team].carriers : [];
   const heli = team === 0 ? "nh90" : "blackhawk";
   const opts = [];
   for (const [key, def] of Object.entries(BOATS)) {
     if (def.team !== team || def.kind !== "ship") continue;
     const has = owned.includes(key);
-    opts.push({ key, label: def.short, sub: has ? `Stufe ${def.level}${def.heliSpots ? " · Träger" : ""}` : `im Laden · ${fmtMoney(def.price)}`, ok: has });
+    opts.push({ key, label: def.short, sub: has ? `Stufe ${def.level}${def.carrier ? " · Träger" : def.heliSpots ? " · Landedeck" : ""}` : `im Laden · ${fmtMoney(def.price)}`, ok: has });
   }
   opts.push({ key: "heli:af", label: BOATS[heli].short, sub: "vom Flugfeld", ok: true });
-  for (const c of carriers) opts.push({ key: `heli:${c.id}`, label: BOATS[heli].short, sub: `auf Träger von ${c.name} · ${c.free} frei`, ok: true });
+  // Jedes Schiff mit Landedeck: freie Plätze = Hubschrauber, die dort noch starten können
+  for (const c of carriers) {
+    const sd = BOATS[c.ship] || {};
+    const total = c.total || (sd.heliSpots ? sd.heliSpots.length : 1);
+    opts.push({
+      key: `heli:${c.id}`,
+      label: `${BOATS[sd.heliType || heli].short} · ${c.name}`,
+      sub: `${sd.short || "Schiff"} · ${c.free > 0 ? `${c.free}/${total} frei` : `0/${total} – belegt`}`,
+      ok: c.free > 0,
+    });
+  }
   opts.push({ key: "drone", label: BOATS[DRONE_OF[team]].short, sub: "vom Flugfeld · ARM/Störpod", ok: true });
   if (!opts.some((o) => o.key === state.spawnChoice && o.ok)) state.spawnChoice = START_SHIP[team];
   optionButtons(box, opts, state.spawnChoice, (k) => {
@@ -1991,7 +2001,7 @@ function renderSpawnOptions() {
   });
   // Startort: Heimathafen oder ein gehaltener Stützpunkt (nur kleine Schiffe)
   const def = BOATS[choiceType()];
-  const small = def.kind === "ship" && !def.heliSpots && def.level <= FRONT.maxSpawnLevel;
+  const small = def.kind === "ship" && !def.carrier && def.level <= FRONT.maxSpawnLevel;
   const front = st && st.front ? st.front : null;
   const locs = [{ key: "", label: "Heimathafen", sub: "Marinebasis", ok: true }];
   if (def.kind === "ship") {

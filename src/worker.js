@@ -53,7 +53,7 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 9;
+const WORLD_VERSION = 10;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
 const RAFT_LIFE = 90; // s
 
@@ -145,7 +145,7 @@ export class World {
       for (const p of this.players.values()) {
         teams[p.team].players++;
         teams[p.team].kills += p.kills;
-        if (BOATS[p.type].heliSpots) teams[p.team].carriers.push({ id: p.id, name: p.name, free: this.freeHeliSpots(p) });
+        if (BOATS[p.type].heliSpots) teams[p.team].carriers.push({ id: p.id, name: p.name, ship: p.type, free: this.freeHeliSpots(p), total: BOATS[p.type].heliSpots.length });
       }
       const token = url.searchParams.get("token");
       const account = token ? await this.getAccount(token) : null;
@@ -404,19 +404,24 @@ export class World {
     }
     if (want.startsWith("heli")) {
       const wantedId = +want.split(":")[1] || 0;
-      const carriers = [...this.players.values()].filter((p) => BOATS[p.type].heliSpots && p.team === team && this.freeHeliSpots(p) > 0);
-      const c = carriers.find((p) => p.id === wantedId) || carriers[0];
-      if (!c) return fallback("Kein Träger deines Teams mit freiem Landeplatz – Start im Hafen.");
+      const c = this.players.get(wantedId);
+      if (!c || c.team !== team || !BOATS[c.type].heliSpots || this.freeHeliSpots(c) <= 0) {
+        const r = this.chooseSpawn(team, "heli:af", loc, acct);
+        return { ...r, note: "Landedeck nicht mehr frei – Start vom Flugfeld." };
+      }
       const cdef = BOATS[c.type];
-      const used = new Set([...this.players.values()].filter((p) => p.carrierId === c.id).map((p) => p.spot));
-      const spot = cdef.heliSpots.findIndex((_, i) => !used.has(i));
+      // Jeder Landeplatz trägt genau einen Hubschrauber, bis dieser zerstört ist
+      const reserved = new Set([...this.players.values()].filter((p) => p.carrierId === c.id).map((p) => p.spot));
+      const landed = new Set([...this.players.values()].filter((p) => p.landed && p.landed.carrierId === c.id).map((p) => p.landed.spot));
+      let spot = cdef.heliSpots.findIndex((_, i) => !reserved.has(i) && !landed.has(i));
+      if (spot < 0) spot = cdef.heliSpots.findIndex((_, i) => !reserved.has(i));
       const s = heliSpotWorld(c.b, spot, cdef);
       return { type: cdef.heliType, spawn: { ...s, spot }, carrierId: c.id };
     }
     const def = BOATS[want];
     if (!def || def.kind !== "ship" || def.team !== team) return fallback();
     if (!acct.owned.includes(want)) return fallback(`${def.short} noch nicht gekauft – Start mit dem Standardschiff.`);
-    if (loc.startsWith("op:") && (def.heliSpots || def.level > FRONT.maxSpawnLevel)) {
+    if (loc.startsWith("op:") && (def.carrier || def.level > FRONT.maxSpawnLevel)) {
       return { type: want, spawn: this.spawnInHarbor(team, def), note: `${def.short} ist zu groß für den Stützpunkt – Start im Heimathafen.` };
     }
     if (loc.startsWith("op:")) {
@@ -427,7 +432,7 @@ export class World {
       }
       return { type: want, spawn: this.spawnInHarbor(team, def), note: "Stützpunkt nicht mehr in eurer Hand – Start im Hafen." };
     }
-    return { type: want, spawn: def.heliSpots ? this.spawnCarrier(team, def) : this.spawnInHarbor(team, def) };
+    return { type: want, spawn: def.carrier ? this.spawnCarrier(team, def) : this.spawnInHarbor(team, def) };
   }
 
   freeHeliSpots(carrier) {
@@ -633,7 +638,7 @@ export class World {
     if (!this.inOwnHarbor(p)) return this.send(p.ws, { t: "shop", ok: false, m: "Schiffswechsel nur im eigenen Hafen." });
     for (const o of this.players.values()) if (o.carrierId === p.id) o.carrierId = 0;
     p.type = ship;
-    const s = def.heliSpots ? this.spawnCarrier(p.team, def) : this.spawnInHarbor(p.team, def);
+    const s = def.carrier ? this.spawnCarrier(p.team, def) : this.spawnInHarbor(p.team, def);
     Object.assign(p.b, { x: s.x, y: s.y, h: s.h, v: 0, w: 0 });
     p.queue = [];
     p.last = { th: 0, ru: 0 };

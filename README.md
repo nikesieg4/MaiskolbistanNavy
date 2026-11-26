@@ -66,6 +66,13 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
   Locks auf Ziele in der Nähe bauen sich nicht auf, gelenkte Flugkörper können ihr Ziel verlieren. Der Störer sendet
   selbst – ARM können sich auf ihn aufschalten.
 
+## Landedecks und Hubschrauber-Start
+- Hubschrauber wählen beim Start, wo sie erscheinen: Flugfeld (unbegrenzt) oder ein Schiff des eigenen Teams mit Landedeck.
+- Jedes Landedeck trägt genau einen Hubschrauber: Fregatte Sachsen (F124), Arleigh Burke und LCS Independence je 1 Platz, die Träger Ähre und America je 6.
+- Startet ein Spieler dort, ist der Platz belegt („0/1 – belegt“), bis dieser Hubschrauber zerstört ist. Wegfliegen gibt den Platz nicht frei.
+- Wird das Schiff selbst versenkt, verfallen seine Plätze.
+- Landen (Hangar, Reparatur, Bewaffnung) geht auf jedem freien Landedeck des eigenen Teams.
+
 ## Höhe (Hubschrauber, Drohnen, Flugkörper)
 - **Q** steigen, **C** sinken (Sollhöhe, die Ist-Höhe folgt mit der Steigrate). Hubschrauber 15–1.500 m, Drohnen 150–6.000 m.
 - Höher = größere Sensorreichweite (Radarhorizont). Unter 60 m fliegt man „unter dem Radar“ und wird viel schwerer entdeckt.
