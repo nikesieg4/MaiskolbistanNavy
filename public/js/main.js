@@ -34,6 +34,7 @@ import {
 } from "../shared/sim.js";
 import { drawCloudShadows, drawWhitecaps, drawAtmosphere, envLabel } from "./weather.js";
 import { initAccount, renderAccount } from "./account.js";
+import { initAdmin, onAdminMessage, closeAdmin, adminOpen } from "./admin.js";
 import { drawBases, drawBasesMinimap } from "./base.js";
 import * as radar from "./radar.js";
 import { drawVehicle, drawAirShadow, exhaustsOf } from "./vehicles.js";
@@ -209,7 +210,8 @@ const waterPattern = ctx.createPattern(waterTile, "repeat");
 // ---------------- Eingabe ----------------
 addEventListener("keydown", (e) => {
   if (!state.playing) return;
-  if (e.target && e.target.tagName === "INPUT") return; // Chat-Eingabe
+  if (e.target && ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return; // Chat, Admin-Menü
+  if (e.key === "Escape" && adminOpen()) return closeAdmin();
   if (e.key === "Enter" && !e.repeat) {
     e.preventDefault();
     openChat();
@@ -364,6 +366,12 @@ function activateAbility() {
 }
 
 canvas.addEventListener("mousedown", (e) => {
+  if (e.button === 0 && state.tpArmed) {
+    // Admin: Teleport zum angeklickten Punkt
+    state.tpArmed = false;
+    send({ t: "adm", a: "tp", x: Math.round(state.mouseWorld.x), y: Math.round(state.mouseWorld.y) });
+    return;
+  }
   if (e.button === 0 && state.radarK > 0.5 && state.pred) sendLock();
 });
 
@@ -521,6 +529,7 @@ function onMessage(m) {
       break;
     case "dead":
       closeChat();
+      closeAdmin();
       state.dead = { by: m.by, x: m.x, y: m.y, h: m.h, time: performance.now(), heli: isAir(BOATS[m.type] || {}) };
       state.pred = null;
       if (state.dead.heli) combat.crashAt(m.x, m.y, m.h);
@@ -545,6 +554,18 @@ function onMessage(m) {
     case "chat":
       addChatLine(m);
       break;
+    case "admin":
+    case "adminstate":
+      onAdminMessage(m);
+      break;
+    case "announce": {
+      const el = $("announce");
+      el.textContent = `📢 ${m.m}`;
+      el.hidden = false;
+      clearTimeout(state.annT);
+      state.annT = setTimeout(() => (el.hidden = true), 9000);
+      break;
+    }
     case "rank":
       showToast(`⭐ Befördert: ${m.name}!`, "money");
       break;
@@ -2316,6 +2337,12 @@ async function refreshTeamStatus(once) {
     statusTimer = setTimeout(refreshTeamStatus, 3000);
   }
 }
+initAdmin({
+  send: (o) => state.ws && state.ws.readyState === 1 && state.ws.send(JSON.stringify(o)),
+  outposts: map.outposts,
+  armTeleport: () => (state.tpArmed = true),
+  toast: (m, k) => showToast(m, k),
+});
 initAccount({
   getToken: () => TOKEN,
   setToken,

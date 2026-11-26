@@ -77,6 +77,21 @@
     <button id="hangarBtn" type="button" hidden>🛩 Hangar – Bewaffnung <kbd>H</kbd></button>
     <button id="shopBtn" type="button" hidden>🛒 Laden <kbd>B</kbd></button>
     <div id="toasts"></div>
+    <div id="announce" hidden></div>
+    <div id="admPwBox" class="admmodal" hidden>
+      <form id="admPwForm" class="shopcard">
+        <h2>Admin-Anmeldung</h2>
+        <input id="admPw" type="password" autocomplete="off" maxlength="200" placeholder="Passwort" />
+        <div class="admrow"><button type="submit">Anmelden</button><button type="button" id="admPwCancel">Abbrechen</button></div>
+        <small id="admPwMsg"></small>
+      </form>
+    </div>
+    <div id="admPanel" class="admmodal" hidden>
+      <div class="shopcard admcard">
+        <div class="shophead"><h2>🛠 Admin-Menü</h2><button type="button" id="admClose">Schließen</button></div>
+        <div id="admBody"></div>
+      </div>
+    </div>
     <div id="chat">
       <div id="chatLog" aria-live="polite"></div>
       <form id="chatForm" hidden autocomplete="off">

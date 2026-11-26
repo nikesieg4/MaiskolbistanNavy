@@ -57,7 +57,9 @@ import {
   SEASON,
   seasonOf,
   seasonEnd,
+  WEATHER,
 } from "../public/shared/sim.js";
+const WEATHER_COUNT = WEATHER.length;
 import ASSETS from "./assets.gen.js";
 
 const MAX_PLAYERS = 64;
@@ -66,7 +68,7 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 12;
+const WORLD_VERSION = 13;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
 
 // ---------- Konten: Anmeldung ----------
@@ -565,24 +567,18 @@ export class World {
     return [Math.round(e.h * 100) / 100, e.w, e.p, Math.round(e.k * 100) / 100];
   }
 
-  // Chat: an alle oder nur ans eigene Team; ":DEV_GIVE_TALER_<Wert>" ist ein Entwickler-Befehl
+  // Chat: an alle oder nur ans eigene Team; ":DEV" öffnet die Admin-Anmeldung (wird nicht gesendet)
   chat(p, msg) {
     const text = String(msg.m ?? "")
       .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e]/g, "")
       .trim()
       .slice(0, 140);
     if (!text) return;
-    const dev = /^:DEV_GIVE_TALER_(\d{1,12})$/i.exec(text);
-    if (dev) {
-      const amount = Math.min(+dev[1], 1e9);
-      if (amount > 0 && p.acct) {
-        p.acct.money += amount;
-        p.acct.dirty = true;
-        this.flushAccounts();
-      }
-      this.send(p.ws, { t: "chat", sys: true, m: `Dev: +${amount.toLocaleString("de-DE")} Taler` });
+    if (text.toUpperCase() === ":DEV") {
+      this.send(p.ws, p.admin ? { t: "admin", ok: true, open: true } : { t: "admin", ask: true });
       return;
     }
+    if (p.muted) return this.send(p.ws, { t: "chat", sys: true, m: "Du bist stummgeschaltet." });
     const now = Date.now();
     if (now - (p.chatT || 0) < 700) return; // Spam-Bremse
     p.chatT = now;
@@ -594,6 +590,138 @@ export class World {
         o.ws.send(data);
       } catch {}
     }
+  }
+
+  // ---------- Admin ----------
+  // Passwort liegt nur als SHA-256-Hash im Cloudflare-Secret ADMIN_PASSWORD_HASH (nie im Quellcode).
+  // Fehlversuche: 3 je Verbindung, 10 je 10 Minuten für alle zusammen. Admin gilt nur für diese Verbindung.
+  async adminLogin(p, pw) {
+    const now = Date.now();
+    const g = this.adminFails && now - this.adminFails.t < 600000 ? this.adminFails : (this.adminFails = { n: 0, t: now });
+    if ((p.adminTries || 0) >= 3 || g.n >= 10) return this.send(p.ws, { t: "admin", ok: false, m: "Zu viele Fehlversuche – später erneut versuchen." });
+    const want = String(this.env.ADMIN_PASSWORD_HASH || "").toLowerCase();
+    const got = toHex(await crypto.subtle.digest("SHA-256", enc.encode(String(pw || "").slice(0, 200))));
+    if (!want || !safeEqual(got, want)) {
+      p.adminTries = (p.adminTries || 0) + 1;
+      g.n++;
+      return this.send(p.ws, { t: "admin", ok: false, m: "Falsches Passwort." });
+    }
+    p.admin = true;
+    console.log(`Admin angemeldet: ${p.name}`);
+    this.send(p.ws, { t: "admin", ok: true, open: true });
+    this.sendAdminState(p);
+  }
+
+  sendAdminState(p) {
+    this.send(p.ws, {
+      t: "adminstate",
+      players: [...this.players.values()].map((o) => ({ id: o.id, name: o.name, team: o.team, type: o.type, hp: Math.ceil(o.hp), reg: !!o.reg, muted: !!o.muted, god: !!o.god, admin: !!o.admin })),
+      wx: this.wxOverride || null,
+      env: this.envRow(),
+      front: this.front ? this.front.own : [],
+      season: this.front ? this.front.season : 0,
+    });
+  }
+
+  adminAction(p, m) {
+    if (!p.admin) return;
+    const a = String(m.a || "");
+    const target = m.id ? this.players.get(+m.id) : p;
+    const num = (v, lo, hi) => clamp(Math.floor(+v || 0), lo, hi);
+    const say = (txt) => this.send(p.ws, { t: "chat", sys: true, m: `Admin: ${txt}` });
+    console.log(`Admin ${p.name}: ${a} ${JSON.stringify(m)}`);
+    if (a === "money" && target && target.acct && !target.acct.temp) {
+      const n = num(m.n, -1e9, 1e9);
+      target.acct.money = Math.max(0, target.acct.money + n);
+      target.acct.dirty = true;
+      say(`${n >= 0 ? "+" : ""}${n.toLocaleString("de-DE")} Taler für ${target.name}`);
+    } else if (a === "xp" && target && target.acct && !target.acct.temp) {
+      target.acct.xp = num(m.n, 0, 10000000);
+      target.acct.dirty = true;
+      target.rank = rankOf(target.acct.xp);
+      say(`${target.name}: ${target.acct.xp} EP (${RANKS[target.rank].name})`);
+    } else if (a === "rank" && target && target.acct && !target.acct.temp) {
+      const r = num(m.n, 0, RANKS.length - 1);
+      target.acct.xp = RANKS[r].xp;
+      target.acct.dirty = true;
+      target.rank = r;
+      say(`${target.name} ist jetzt ${RANKS[r].name}`);
+    } else if (a === "unlock" && target && target.acct && !target.acct.temp) {
+      for (const [k, d] of Object.entries(BOATS)) if (isBuyable(d) && !target.acct.owned.includes(k)) target.acct.owned.push(k);
+      target.acct.dirty = true;
+      say(`alle Fahrzeuge für ${target.name} freigeschaltet`);
+    } else if (a === "heal" && target) {
+      const def = BOATS[target.type];
+      target.hp = def.hp;
+      if (def.fuel) target.b.fuel = def.fuel;
+      for (const w of target.weapons) this.initWeapon(target, w);
+      say(`${target.name} repariert, aufmunitioniert, betankt`);
+    } else if (a === "god" && target) {
+      target.god = !target.god;
+      say(`Unverwundbar für ${target.name}: ${target.god ? "an" : "aus"}`);
+    } else if (a === "tp") {
+      // Teleport zum Mauszeiger
+      if (!target || target.landed) return say("gelandete Fahrzeuge erst starten");
+      const x = clamp(+m.x || 0, -WORLD_SIZE / 2 + 50, WORLD_SIZE / 2 - 50);
+      const y = clamp(+m.y || 0, -WORLD_SIZE / 2 + 50, WORLD_SIZE / 2 - 50);
+      if (!isAir(BOATS[target.type]) && isOnLand(this.map, x, y, 30)) return say("dort ist Land");
+      Object.assign(target.b, { x, y });
+      target.queue = [];
+      say(`${target.name} versetzt`);
+    } else if (a === "kill" && target && target !== p) {
+      this.damage(target, 99999, null, true);
+      say(`${target.name} zerstört`);
+    } else if (a === "kick" && target && target !== p) {
+      this.send(target.ws, { t: "chat", sys: true, m: "Du wurdest vom Admin entfernt." });
+      try {
+        target.ws.close(4001, "entfernt");
+      } catch {}
+      say(`${target.name} entfernt`);
+    } else if (a === "mute" && target && target !== p) {
+      target.muted = !target.muted;
+      say(`${target.name} ${target.muted ? "stummgeschaltet" : "darf wieder schreiben"}`);
+    } else if (a === "announce") {
+      const txt = String(m.text || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 200);
+      if (txt) this.broadcast({ t: "announce", m: txt });
+    } else if (a === "weather") {
+      // Wetter/Uhrzeit festlegen (null = automatisch)
+      const w = m.w === null || m.w === "" || m.w === undefined ? null : num(m.w, 0, WEATHER_COUNT - 1);
+      const h = m.h === null || m.h === "" || m.h === undefined ? null : clamp(+m.h, 0, 23.99);
+      this.wxOverride = w === null && h === null ? null : { w, h };
+      this.updateEnv();
+      say(this.wxOverride ? "Wetter/Uhrzeit festgelegt" : "Wetter/Uhrzeit wieder automatisch");
+    } else if (a === "outpost" && this.front) {
+      const i = num(m.i, 0, this.map.outposts.length - 1);
+      const own = num(m.own, -1, 1);
+      this.front.own[i] = own;
+      this.front.prog[i] = own === 0 ? -100 : own === 1 ? 100 : 0;
+      this.frontDirty = true;
+      this.flushFront();
+      this.broadcast({ t: "front", i, own, prev: -2, by: own < 0 ? 0 : own });
+      say(`Stützpunkt ${this.map.outposts[i].name} → ${own < 0 ? "neutral" : TEAMS[own].name}`);
+    } else if (a === "resetfront" && this.front) {
+      this.front.own = this.front.own.map(() => -1);
+      this.front.prog = this.front.prog.map(() => 0);
+      this.frontDirty = true;
+      this.flushFront();
+      say("Frontkarte zurückgesetzt");
+    } else if (a === "clearproj") {
+      this.projectiles = [];
+      say("alle Geschosse entfernt");
+    }
+    this.flushAccounts();
+    this.sendAdminState(p);
+  }
+
+  updateEnv() {
+    const e = envAt(Date.now());
+    if (this.wxOverride) {
+      if (this.wxOverride.w !== null) e.w = e.p = this.wxOverride.w;
+      if (this.wxOverride.h !== null) e.h = this.wxOverride.h;
+      e.k = 1;
+    }
+    this.wx = e;
+    this.wxF = envFactors(e);
   }
 
   // Gefechtsbelohnung: Taler und Erfahrung (ein Zehntel)
@@ -770,6 +898,10 @@ export class World {
         this.switchShip(player, msg.ship);
       } else if (msg.t === "chat") {
         this.chat(player, msg);
+      } else if (msg.t === "adminlogin") {
+        this.adminLogin(player, msg.pw);
+      } else if (msg.t === "adm") {
+        this.adminAction(player, msg);
       } else if (msg.t === "loadout") {
         this.setLoadout(player, msg.slot | 0, String(msg.w || ""));
       }
@@ -1514,10 +1646,7 @@ export class World {
       return;
     }
     this.tick++;
-    if (this.tick % 20 === 0) {
-      this.wx = envAt(Date.now());
-      this.wxF = envFactors(this.wx);
-    }
+    if (this.tick % 20 === 0) this.updateEnv();
     if (this.tick % 1200 === 0) this.checkSeason();
     const list = [...this.players.values()];
 
@@ -2137,7 +2266,7 @@ export class World {
   damage(p, dmg, attacker, force = false) {
     if (p.hp <= 0) return;
     if (!force) {
-      if (p.protect > 0) return;
+      if (p.protect > 0 || p.god) return;
       if (inRect(harborRect(teamBase(p.team)), p.b.x, p.b.y)) return; // sicherer Hafen
       if (inRect(airfieldRect(p.team), p.b.x, p.b.y)) return; // eigenes Flugfeld
     }

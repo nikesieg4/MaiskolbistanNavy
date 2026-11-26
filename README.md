@@ -143,7 +143,23 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 ## Chat
 - **Enter** (oder 💬 rechts, fürs iPad) öffnet den Chat, Enter sendet, Esc schließt. **Tab** bzw. der Knopf links wechselt zwischen „Alle“ und „Team“.
 - Höchstens 140 Zeichen, eine Nachricht pro 0,7 s. Die letzten 8 Zeilen stehen links unten und blenden nach 12 s aus.
-- Entwickler-Befehl: `:DEV_GIVE_TALER_<Wert>` schreibt den Wert sofort aufs eigene Konto (max. 1 Mrd.). Der Befehl erscheint nur beim Absender, nicht im Chat der anderen. **Achtung:** Jeder, der den Befehl kennt, kann ihn benutzen.
+
+## Admin-Menü
+- `:DEV` im Chat öffnet eine Passwortabfrage (der Befehl wird nicht an andere gesendet).
+- **Passwort:**
+  - Es steht nicht im Quellcode. Der Server vergleicht nur mit einem SHA-256-Hash im Cloudflare-Secret `ADMIN_PASSWORD_HASH`.
+  - Ändern: `printf '%s' 'NEUES_PASSWORT' | sha256sum`, den Hash mit `npx wrangler secret put ADMIN_PASSWORD_HASH` setzen.
+- **Fehlversuche:** 3 je Verbindung, 10 je 10 Minuten insgesamt.
+- **Gültigkeit:** Admin gilt nur für die aktuelle Verbindung, jede Aktion prüft der Server.
+- **Ich selbst:**
+  - Taler geben, Dienstgrad setzen, alle Fahrzeuge freischalten.
+  - Reparieren, aufmunitionieren und betanken, unverwundbar an/aus.
+  - Teleport per Klick auf die Karte.
+- **Spieler:** Taler geben, heilen, unverwundbar, stummschalten, zerstören, vom Server entfernen.
+- **Welt:**
+  - Wetter und Uhrzeit festlegen oder wieder automatisch.
+  - Ansage an alle.
+  - Stützpunkte einzeln setzen, Frontkarte zurücksetzen, alle Geschosse löschen.
 
 ## Landedecks und Hubschrauber-Start
 - Hubschrauber wählen beim Start, wo sie erscheinen: Flugfeld (unbegrenzt) oder ein Schiff des eigenen Teams mit Landedeck.
