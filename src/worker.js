@@ -79,6 +79,7 @@ export class World {
           queue: [],
           last: { th: 0, ru: 0 },
           ack: 0,
+          aim: 0,
         };
         this.players.set(player.id, player);
         this.send(ws, {
@@ -93,6 +94,9 @@ export class World {
         const seq = msg.s | 0;
         if (seq <= player.ack) return;
         player.queue.push({ s: seq, th: +msg.th || 0, ru: +msg.ru || 0 });
+        const arc = BOATS[player.type].gun.arc;
+        const aim = +msg.aim;
+        player.aim = Number.isFinite(aim) && Math.abs(aim) <= arc ? aim : 0;
         if (player.queue.length > MAX_QUEUE) player.queue.splice(0, player.queue.length - MAX_QUEUE);
       } else if (msg.t === "ping") {
         this.send(ws, { t: "pong", c: msg.c });
@@ -164,7 +168,7 @@ export class World {
     }
 
     const r = (n, f = 100) => Math.round(n * f) / f;
-    const snap = list.map((p) => [p.id, r(p.b.x), r(p.b.y), r(p.b.h, 1000), r(p.b.v), r(p.b.w, 1000), r(p.last.th), r(p.last.ru)]);
+    const snap = list.map((p) => [p.id, r(p.b.x), r(p.b.y), r(p.b.h, 1000), r(p.b.v), r(p.b.w, 1000), r(p.last.th), r(p.last.ru), r(p.aim, 1000)]);
     for (const p of list) {
       this.send(p.ws, { t: "s", k: this.tick, a: p.ack, p: snap });
     }

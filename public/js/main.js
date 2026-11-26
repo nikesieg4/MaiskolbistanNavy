@@ -37,6 +37,8 @@ const state = {
   zoom: 4.6,
   playing: false,
   ping: 0,
+  aim: 0, // gewünschter Turmwinkel relativ zum Bug
+  mouse: null, // Mausposition in Bildschirmpixeln
 };
 
 const keys = new Set();
@@ -136,6 +138,8 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 addEventListener("blur", () => keys.clear());
+addEventListener("mousemove", (e) => (state.mouse = { x: e.clientX, y: e.clientY }));
+document.addEventListener("mouseleave", () => (state.mouse = null));
 addEventListener(
   "wheel",
   (e) => {
@@ -259,11 +263,12 @@ setInterval(() => {
 function fixedStep() {
   if (!state.pred) return;
   const input = { s: ++state.seq, th: Math.round(state.throttle * 100) / 100, ru: Math.round(state.rudder * 100) / 100 };
+  const aim = Math.round(state.aim * 1000) / 1000;
   state.history.push(input);
   if (state.history.length > 120) state.history.shift();
   state.prevPred = { ...state.pred };
   stepBoat(state.pred, input, DEF, map);
-  if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: "in", ...input }));
+  if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: "in", ...input, aim }));
 }
 
 // ---------------- Interpolation der anderen Boote ----------------
@@ -296,16 +301,30 @@ function interpolatedBoats(now) {
       h: lerpAngle(pa[3], pb[3], t),
       v: lerp(pa[4], pb[4], t),
       th: pb[6],
+      aim: pb[8] ?? 0,
     });
   }
   return out;
+}
+
+// ---------------- Geschützturm ----------------
+// Schwenkt mit begrenzter Geschwindigkeit zum Zielwinkel. Winkel bleiben im Bereich ±arc,
+// daher dreht der Turm nie durch den gesperrten Sektor hinter der Brücke.
+function turretAngle(b, now) {
+  const f = fxFor(b.id);
+  const dt = f.gunT ? Math.min(0.1, (now - f.gunT) / 1000) : 0;
+  f.gunT = now;
+  const target = clamp(b.aim ?? 0, -DEF.gun.arc, DEF.gun.arc);
+  const step = DEF.gun.speed * dt;
+  f.gun = clamp(f.gun + clamp(target - f.gun, -step, step), -DEF.gun.arc, DEF.gun.arc);
+  return f.gun;
 }
 
 // ---------------- Effekte: Kielwasser, Rauch ----------------
 function fxFor(id) {
   let f = fx.get(id);
   if (!f) {
-    f = { trail: [], smoke: [], lastTrail: 0, lastSmoke: 0 };
+    f = { trail: [], smoke: [], lastTrail: 0, lastSmoke: 0, gun: 0, gunT: 0 };
     fx.set(id, f);
   }
   return f;
@@ -546,6 +565,21 @@ function render(now) {
     y1: cam.y + h / 2 / zoom,
   };
 
+  // Turm auf Mauszeiger richten; liegt das Ziel im toten Winkel hinter der Brücke → nach vorne
+  if (me) {
+    let aim = 0;
+    if (state.mouse) {
+      const mx = cam.x + (state.mouse.x - w / 2) / zoom;
+      const my = cam.y + (state.mouse.y - h / 2) / zoom;
+      const gx = me.x + Math.cos(me.h) * DEF.gun.x;
+      const gy = me.y + Math.sin(me.h) * DEF.gun.x;
+      const rel = wrapAngle(Math.atan2(my - gy, mx - gx) - me.h);
+      if (Math.abs(rel) <= DEF.gun.arc) aim = rel;
+    }
+    state.aim = aim;
+    me.aim = aim;
+  }
+
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "#14507e";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -587,7 +621,7 @@ function render(now) {
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.h);
-    drawGepard(ctx, { t, seed: b.id * 7919 });
+    drawGepard(ctx, { t, seed: b.id * 7919, gun: turretAngle(b, now) });
     ctx.restore();
   }
   for (const b of boats) drawSmoke(fxFor(b.id), now);

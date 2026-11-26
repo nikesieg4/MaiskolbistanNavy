@@ -18,6 +18,8 @@ export const BOATS = {
     accel: 2.4,
     decel: 3.2,
     turnRate: 0.32, // rad/s bei Volllast
+    // 76-mm-Turm: Position (m vor Mitte), Schwenkbereich ±arc (hinter der Brücke gesperrt), Schwenkgeschw. rad/s
+    gun: { x: 16.5, arc: (150 * Math.PI) / 180, speed: 1.4 },
   },
 };
 
