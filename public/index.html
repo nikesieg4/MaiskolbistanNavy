@@ -21,6 +21,8 @@
       <div class="hp"><div id="hpFill"></div><span id="hpText">100 / 100</span></div>
       <div class="row"><span>Fahrt</span><b id="speed">0.0 kn</b></div>
       <div class="row"><span>Kurs</span><b id="heading">000°</b></div>
+      <div class="row" id="altRow" hidden><span>Höhe <kbd class="inl">Q</kbd><kbd class="inl">C</kbd></span><b id="alt">–</b></div>
+      <div id="altNote"></div>
       <div class="row"><span>Position</span><b id="pos">0 / 0</b></div>
       <div class="row money"><span>Taler</span><b id="money">0 Taler</b></div>
       <div class="row" id="radarRow"><span>Radar <kbd class="inl">T</kbd></span><b id="radarStatus" class="on">EIN</b></div>
@@ -81,7 +83,7 @@
 
     <div id="bottom">
       <div id="help">
-        <b>W/S</b> Fahrstufe · <b>A/D</b> Ruder · <b>Leertaste</b> Stopp · <b>F</b> Feuer · <b>R</b> Lock · <b>E</b> Fähigkeit · <b>T</b> Radar · <b>H</b> Hangar · <b>1–3</b> Waffe · <b>B</b> Laden · <b>Mausrad</b> Zoom
+        <b>W/S</b> Fahrstufe · <b>A/D</b> Ruder · <b>Leertaste</b> Stopp · <b>F</b> Feuer · <b>R</b> Lock · <b>E</b> Fähigkeit · <b>T</b> Radar · <b>H</b> Hangar · <b>Q/C</b> Höhe · <b>1–3</b> Waffe · <b>B</b> Laden · <b>Mausrad</b> Zoom
       </div>
       <div id="weapons" class="panel"></div>
     </div>

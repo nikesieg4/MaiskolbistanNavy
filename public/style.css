@@ -198,3 +198,7 @@ body.missileAlert::after { content: ""; position: fixed; inset: 0; pointer-event
 #hangarBtn[hidden] { display: none; }
 #hangarBtn kbd { position: static; margin-left: 6px; background: rgba(0,0,0,.15); }
 @keyframes pulse3 { 50% { box-shadow: 0 0 18px rgba(157,255,192,.8); } }
+
+#altRow[hidden] { display: none; }
+#altNote { font-size: 11px; color: #9dffc0; min-height: 0; }
+#altNote:empty { display: none; }

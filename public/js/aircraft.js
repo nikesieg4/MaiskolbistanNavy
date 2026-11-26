@@ -33,13 +33,28 @@ function rotorDisc(ctx, x, y, R, t, blades, ph, tip = "rgba(230,200,40,0.85)") {
     ctx.fill();
     ctx.save();
     ctx.rotate(a);
-    ctx.fillStyle = "rgba(20,20,20,0.75)";
-    rr(ctx, 0.4, -0.3, R - 0.4, 0.6, 0.2);
+    const bg = ctx.createLinearGradient(0, -0.3, 0, 0.3);
+    bg.addColorStop(0, "rgba(95,100,105,0.85)");
+    bg.addColorStop(0.5, "rgba(30,32,35,0.8)");
+    bg.addColorStop(1, "rgba(15,15,18,0.7)");
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.moveTo(0.4, -0.24);
+    ctx.lineTo(R - 0.4, -0.3);
+    // NH90: gepfeilte Blattspitze
+    ctx.lineTo(R, -0.05);
+    ctx.lineTo(R - 0.2, 0.3);
+    ctx.lineTo(0.4, 0.24);
+    ctx.closePath();
     ctx.fill();
     ctx.fillStyle = tip;
-    ctx.fillRect(R - 0.6, -0.3, 0.6, 0.6);
+    ctx.fillRect(R - 0.9, -0.28, 0.5, 0.56);
     ctx.restore();
   }
+  ctx.strokeStyle = "rgba(240,240,240,0.14)";
+  ctx.lineWidth = 0.35;
+  circle(ctx, 0, 0, R - 0.5);
+  ctx.stroke();
   ctx.fillStyle = "#2a2f29";
   circle(ctx, 0, 0, 0.65);
   ctx.fill();
@@ -51,7 +66,7 @@ const NH_BODY = "#6c7680";
 const NH_DARK = "#525b64";
 const NH_LIGHT = "#86909a";
 
-function nhPath(ctx) {
+export function nhPath(ctx) {
   ctx.beginPath();
   ctx.moveTo(7.6, 0);
   ctx.bezierCurveTo(7.5, -1.2, 6.2, -1.6, 4.6, -1.6);
@@ -135,6 +150,23 @@ export function drawNH90(ctx, a) {
   ctx.lineTo(5.0, 1.35);
   ctx.bezierCurveTo(6.2, 1.35, 7.2, 1.0, 7.3, 0);
   ctx.fill();
+  // Spiegelung auf der Kanzel und Plattenlinien
+  ctx.fillStyle = "rgba(220,235,255,0.35)";
+  ctx.beginPath();
+  ctx.moveTo(6.8, -0.7);
+  ctx.quadraticCurveTo(6.2, -1.15, 5.0, -1.15);
+  ctx.lineTo(5.0, -0.85);
+  ctx.quadraticCurveTo(6.0, -0.9, 6.8, -0.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.lineWidth = 0.04;
+  for (const x of [4.1, 1.4, -1.0, -2.6, -5.4, -8]) {
+    ctx.beginPath();
+    ctx.moveTo(x, -1.6);
+    ctx.lineTo(x, 1.6);
+    ctx.stroke();
+  }
   // Triebwerke
   for (const side of [-1, 1]) {
     ctx.fillStyle = NH_LIGHT;
@@ -264,6 +296,19 @@ export function drawHeron(ctx, a) {
     armUnder(ctx, 0.3, -6, n > 0);
     armUnder(ctx, 0.3, 6, n > 1);
   }
+  // Querruder und Klappen
+  ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.lineWidth = 0.06;
+  ctx.beginPath();
+  ctx.moveTo(-0.2, -12.5);
+  ctx.lineTo(-0.2, -8);
+  ctx.moveTo(-0.2, 8);
+  ctx.lineTo(-0.2, 12.5);
+  ctx.moveTo(0.2, -7.5);
+  ctx.lineTo(0.2, -2);
+  ctx.moveTo(0.2, 2);
+  ctx.lineTo(0.2, 7.5);
+  ctx.stroke();
   // Rumpf mit Satellitenbuckel
   const g = ctx.createLinearGradient(0, -0.9, 0, 0.9);
   g.addColorStop(0, "#e2e6e8");
@@ -274,6 +319,20 @@ export function drawHeron(ctx, a) {
   ctx.fillStyle = "#c2c8cc";
   circle(ctx, 4.2, 0, 0.75);
   ctx.fill();
+  // Glanzlicht auf dem Satellitenbuckel und entlang des Rumpfs
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  circle(ctx, 4.0, -0.3, 0.3);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.25)";
+  ctx.fillRect(-4.2, -0.6, 10.5, 0.22);
+  ctx.strokeStyle = "rgba(0,0,0,0.18)";
+  ctx.lineWidth = 0.04;
+  for (const x of [5.2, 2.6, -0.6, -3.2]) {
+    ctx.beginPath();
+    ctx.moveTo(x, -0.85);
+    ctx.lineTo(x, 0.85);
+    ctx.stroke();
+  }
   // Sensorkugel unter der Nase
   ctx.fillStyle = "#2c3236";
   circle(ctx, 6.2, 0, 0.35);
@@ -361,6 +420,24 @@ export function drawReaper(ctx, a) {
   ctx.fillStyle = "#2c3236";
   circle(ctx, 4.6, 0.3, 0.32);
   ctx.fill();
+  // Glanzlicht, Plattenlinien, Ruder
+  ctx.fillStyle = "rgba(255,255,255,0.28)";
+  ctx.fillRect(-4.6, -0.45, 9.4, 0.18);
+  ctx.strokeStyle = "rgba(0,0,0,0.22)";
+  ctx.lineWidth = 0.04;
+  for (const x of [3.6, 1.0, -1.8]) {
+    ctx.beginPath();
+    ctx.moveTo(x, -0.7);
+    ctx.lineTo(x, 0.7);
+    ctx.stroke();
+  }
+  ctx.lineWidth = 0.06;
+  ctx.beginPath();
+  ctx.moveTo(-0.1, -9.6);
+  ctx.lineTo(-0.1, -6);
+  ctx.moveTo(-0.1, 6);
+  ctx.lineTo(-0.1, 9.6);
+  ctx.stroke();
   if (a.flag) {
     for (let i = 0; i < 3; i++) {
       ctx.fillStyle = a.flag.colors[i];

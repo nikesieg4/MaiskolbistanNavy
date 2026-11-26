@@ -24,7 +24,7 @@ const C = {
   orange: "#e46b1f",
 };
 
-function hullPath(ctx, inset = 0) {
+export function hullPath(ctx, inset = 0) {
   const b = 3.9 - inset;
   const st = -HL + inset;
   const bow = HL - inset * 1.6;

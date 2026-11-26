@@ -18,7 +18,7 @@ function circle(ctx, x, y, r) {
 // ---------- Baukasten ----------
 
 // Rumpf: spitzer Bug, gerades Heck. bowStart = ab wo der Rumpf zuläuft (Anteil der Länge vom Heck)
-function hullPath(ctx, L, B, inset = 0, bowStart = 0.62, sternW = 0.9) {
+export function hullPath(ctx, L, B, inset = 0, bowStart = 0.62, sternW = 0.9) {
   const hl = L / 2 - inset;
   const b = B / 2 - inset;
   const xs = -L / 2 + L * bowStart;
@@ -48,10 +48,20 @@ function drawHull(ctx, L, B, o = {}) {
   ctx.fillStyle = g;
   hullPath(ctx, L, B, Math.max(0.35, B * 0.04), o.bowStart, o.sternW);
   ctx.fill();
-  // Plattenfugen
+  // Plattenfugen und rutschfeste Decksfelder
   ctx.save();
   hullPath(ctx, L, B, 0.4, o.bowStart, o.sternW);
   ctx.clip();
+  ctx.fillStyle = "rgba(0,0,0,0.07)";
+  ctx.fillRect(-L / 2, -B * 0.32, L, B * 0.64);
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(-L / 2, -B * 0.36);
+  ctx.lineTo(L / 2, -B * 0.36);
+  ctx.moveTo(-L / 2, B * 0.36);
+  ctx.lineTo(L / 2, B * 0.36);
+  ctx.stroke();
   ctx.strokeStyle = "rgba(0,0,0,0.07)";
   ctx.lineWidth = 0.08;
   for (let x = -L / 2; x < L / 2; x += 2) {
@@ -73,14 +83,20 @@ function block(ctx, x0, x1, hw, o = {}) {
   const c = o.color || "#a9b2b8";
   const tf = o.taperFront ?? 0.3; // Schräge vorn (Anteil der Breite)
   const tb = o.taperBack ?? 0;
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
-  ctx.beginPath();
-  ctx.moveTo(x0 + 0.6, -hw + 0.8);
-  ctx.lineTo(x1 - hw * tf + 0.6, -hw + 0.8);
-  ctx.lineTo(x1 + 0.6, 0.8);
-  ctx.lineTo(x1 - hw * tf + 0.6, hw + 0.8);
-  ctx.lineTo(x0 + 0.6, hw + 0.8);
-  ctx.fill();
+  // Schattenwurf: Länge nach Höhe des Aufbaus, weich in zwei Stufen
+  const sh = o.height ?? Math.min(4, 1 + hw * 0.4);
+  for (const [k, al] of [[1, 0.16], [0.6, 0.14]]) {
+    const dx = sh * 0.5 * k;
+    const dy = sh * 0.8 * k;
+    ctx.fillStyle = `rgba(0,10,20,${al})`;
+    ctx.beginPath();
+    ctx.moveTo(x0 + dx, -hw + dy);
+    ctx.lineTo(x1 - hw * tf + dx, -hw + dy);
+    ctx.lineTo(x1 + dx, dy);
+    ctx.lineTo(x1 - hw * tf + dx, hw + dy);
+    ctx.lineTo(x0 + dx, hw + dy);
+    ctx.fill();
+  }
   const g = ctx.createLinearGradient(0, -hw, 0, hw);
   g.addColorStop(0, o.hi || "#c6cdd2");
   g.addColorStop(0.5, c);
@@ -100,6 +116,72 @@ function block(ctx, x0, x1, hw, o = {}) {
   ctx.strokeStyle = "rgba(0,0,0,0.35)";
   ctx.lineWidth = 0.1;
   ctx.stroke();
+  // Kantenlicht (Steuerbord oben = Lichtseite) und Schattenkante
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 0.14;
+  ctx.beginPath();
+  ctx.moveTo(x0 + hw * tb, -hw + 0.12);
+  ctx.lineTo(x1 - hw * tf, -hw + 0.12);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(0,0,0,0.25)";
+  ctx.beginPath();
+  ctx.moveTo(x0 + hw * tb, hw - 0.12);
+  ctx.lineTo(x1 - hw * tf, hw - 0.12);
+  ctx.stroke();
+  if (o.plain) return;
+  roofDetails(ctx, x0, x1 - hw * tf, hw);
+}
+
+// Dachausrüstung: Lüftergitter, Luken, Antennenfüße, Rettungsinseln (deterministisch je Block)
+function roofDetails(ctx, x0, x1, hw) {
+  let seed = Math.floor((x0 * 7.31 + x1 * 3.17 + hw * 11.7) * 1000) >>> 0;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const len = x1 - x0;
+  const n = Math.max(2, Math.floor(len / 4));
+  for (let i = 0; i < n; i++) {
+    const x = x0 + 1 + rnd() * (len - 2.5);
+    const y = (rnd() * 2 - 1) * (hw - 1.4);
+    const k = rnd();
+    if (k < 0.35) {
+      // Lüftergitter
+      ctx.fillStyle = "#5c656b";
+      ctx.fillRect(x, y - 0.5, 1.4, 1.0);
+      ctx.strokeStyle = "rgba(0,0,0,0.5)";
+      ctx.lineWidth = 0.05;
+      for (let j = 0; j < 4; j++) {
+        ctx.beginPath();
+        ctx.moveTo(x + 0.2 + j * 0.3, y - 0.45);
+        ctx.lineTo(x + 0.2 + j * 0.3, y + 0.45);
+        ctx.stroke();
+      }
+    } else if (k < 0.6) {
+      // Luke
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.beginPath();
+      ctx.roundRect(x + 0.08, y - 0.42, 1.0, 0.9, 0.15);
+      ctx.fill();
+      ctx.fillStyle = "#9aa3a9";
+      ctx.beginPath();
+      ctx.roundRect(x, y - 0.5, 1.0, 0.9, 0.15);
+      ctx.fill();
+    } else if (k < 0.8) {
+      // Peitschenantenne / Antennenfuß mit Schattenstrich
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      ctx.lineWidth = 0.06;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 1.6, y + 1.2);
+      ctx.stroke();
+      ctx.fillStyle = "#30363a";
+      ctx.beginPath();
+      ctx.arc(x, y, 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Kabelkanal
+      ctx.fillStyle = "rgba(60,66,70,0.6)";
+      ctx.fillRect(x, y - 0.12, Math.min(3.5, len * 0.3), 0.24);
+    }
+  }
 }
 
 function windows(ctx, x, hw, n = 6) {
@@ -129,8 +211,12 @@ function gun(ctx, x, y, angle, kind) {
   circle(ctx, 0, 0, 2.1);
   ctx.fill();
   ctx.rotate(angle);
-  ctx.fillStyle = "#3f474d";
   const len = kind === "127" ? 6.2 : kind === "25" ? 4 : 4.8;
+  const bg = ctx.createLinearGradient(0, -0.17, 0, 0.17);
+  bg.addColorStop(0, "#6b747a");
+  bg.addColorStop(0.5, "#3f474d");
+  bg.addColorStop(1, "#2a3034");
+  ctx.fillStyle = bg;
   rr(ctx, 1.2, -0.17, len, 0.34, 0.12);
   ctx.fill();
   ctx.fillStyle = "#2c3236";
@@ -170,6 +256,14 @@ function gun(ctx, x, y, angle, kind) {
   ctx.moveTo(0.3, -1.4);
   ctx.lineTo(0.3, 1.4);
   ctx.stroke();
+  // Glanzlicht
+  const hl = ctx.createRadialGradient(-0.8, -0.7, 0, -0.8, -0.7, 1.3);
+  hl.addColorStop(0, "rgba(255,255,255,0.45)");
+  hl.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = hl;
+  ctx.beginPath();
+  ctx.arc(-0.8, -0.7, 1.3, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -190,6 +284,15 @@ function radarBar(ctx, x, y, len, angle, w = 0.6) {
   ctx.fillStyle = "#9aa4aa";
   rr(ctx, -w / 2, -len / 2, w * 0.35, len, w / 4);
   ctx.fill();
+  // Strahlerelemente
+  ctx.strokeStyle = "rgba(60,70,78,0.45)";
+  ctx.lineWidth = 0.04;
+  for (let yy = -len / 2 + 0.3; yy < len / 2; yy += 0.3) {
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.1, yy);
+    ctx.lineTo(w / 2, yy);
+    ctx.stroke();
+  }
   ctx.fillStyle = "#3d454a";
   circle(ctx, 0, 0, w * 0.5);
   ctx.fill();
@@ -218,6 +321,13 @@ function arrayFaces(ctx, x, hw, color = "#30383d") {
 function mast(ctx, x, y, s = 1) {
   ctx.save();
   ctx.translate(x, y);
+  // Schatten des Mastes
+  ctx.strokeStyle = "rgba(0,10,20,0.18)";
+  ctx.lineWidth = 0.8 * s;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(4 * s, 6.5 * s);
+  ctx.stroke();
   ctx.strokeStyle = "#4b5459";
   ctx.lineWidth = 0.12 * s;
   ctx.strokeRect(-1 * s, -1 * s, 2 * s, 2 * s);
@@ -270,6 +380,15 @@ function canisters(ctx, cells, loaded, len = 5.2, wid = 0.75) {
     ctx.strokeStyle = "rgba(0,0,0,0.35)";
     ctx.lineWidth = 0.05;
     ctx.stroke();
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    for (const bx of [-len * 0.75, -len * 0.45, -len * 0.15]) {
+      ctx.beginPath();
+      ctx.moveTo(bx, -wid / 2);
+      ctx.lineTo(bx, wid / 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(-len, -wid / 2 + 0.05, len, wid * 0.18);
     ctx.fillStyle = full ? "#3f474c" : "#121416";
     rr(ctx, -0.35, -wid / 2 + 0.06, 0.35, wid - 0.12, 0.08);
     ctx.fill();
@@ -504,6 +623,19 @@ export function drawCyclone(ctx, a) {
   }
   gun(ctx, 14, 0, a.gun ?? 0, "25");
   waveFlag(ctx, -L / 2 + 0.4, 0, a.t, ph(a), a.flag, 2.2);
+}
+
+export function lcsOutline(ctx) {
+  const hl = 127 / 2;
+  ctx.beginPath();
+  ctx.moveTo(hl, 0);
+  ctx.lineTo(30, -6);
+  ctx.lineTo(8, -15.8);
+  ctx.lineTo(-hl, -15.8);
+  ctx.lineTo(-hl, 15.8);
+  ctx.lineTo(8, 15.8);
+  ctx.lineTo(30, 6);
+  ctx.closePath();
 }
 
 // LCS Independence: Trimaran, 127 × 31,6 m, riesiges Flugdeck

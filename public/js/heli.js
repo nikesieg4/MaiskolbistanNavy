@@ -17,7 +17,7 @@ function circle(ctx, x, y, r) {
   ctx.arc(x, y, r, 0, Math.PI * 2);
 }
 
-function fuselagePath(ctx) {
+export function fuselagePath(ctx) {
   ctx.beginPath();
   ctx.moveTo(7.7, 0);
   ctx.bezierCurveTo(7.6, -0.9, 6.6, -1.2, 5.2, -1.2);
@@ -123,6 +123,30 @@ export function drawBlackhawk(ctx, anim) {
   ctx.moveTo(5.8, -1.0);
   ctx.lineTo(5.8, 1.0);
   ctx.stroke();
+  // Spiegelung auf der Kanzel
+  ctx.fillStyle = "rgba(220,235,255,0.35)";
+  ctx.beginPath();
+  ctx.moveTo(6.9, -0.55);
+  ctx.quadraticCurveTo(6.4, -0.85, 5.3, -0.85);
+  ctx.lineTo(5.3, -0.6);
+  ctx.quadraticCurveTo(6.2, -0.62, 6.9, -0.4);
+  ctx.closePath();
+  ctx.fill();
+  // Plattenlinien und Nieten am Rumpf
+  ctx.strokeStyle = "rgba(0,0,0,0.28)";
+  ctx.lineWidth = 0.04;
+  for (const x of [4.2, 1.2, -0.9, -2.6, -5.2, -7.8]) {
+    ctx.beginPath();
+    ctx.moveTo(x, -1.2);
+    ctx.lineTo(x, 1.2);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.moveTo(4.2, -0.55);
+  ctx.lineTo(-2.6, -0.55);
+  ctx.moveTo(4.2, 0.55);
+  ctx.lineTo(-2.6, 0.55);
+  ctx.stroke();
   // Kabinentüren (Schiebetüren offen: dunkel)
   ctx.fillStyle = "#1b1f1a";
   ctx.fillRect(1.4, -1.22, 2.6, 0.22);
@@ -153,6 +177,32 @@ export function drawBlackhawk(ctx, anim) {
   ctx.fillStyle = BODY_DARK;
   rr(ctx, -0.4, -0.45, 2.2, 0.9, 0.3); // Getriebe
   ctx.fill();
+  // Infrarot-Abgasdämpfer (schräg nach außen) mit Hitzeflimmern
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.translate(-2.2, side * 1.05);
+    ctx.rotate(side * 0.5 + Math.PI);
+    ctx.fillStyle = "#30362e";
+    rr(ctx, 0, -0.28, 1.6, 0.56, 0.2);
+    ctx.fill();
+    for (let i = 0; i < 3; i++) {
+      const k = (t * 1.5 + i / 3 + (side > 0 ? 0.5 : 0)) % 1;
+      ctx.fillStyle = `rgba(200,190,170,${0.12 * (1 - k)})`;
+      ctx.beginPath();
+      ctx.ellipse(1.8 + k * 2.4, Math.sin(t * 9 + i) * 0.15, 0.4 + k * 0.6, 0.25 + k * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  // Antennen auf dem Rücken
+  ctx.strokeStyle = "rgba(20,20,20,0.6)";
+  ctx.lineWidth = 0.05;
+  ctx.beginPath();
+  ctx.moveTo(-3.4, 0);
+  ctx.lineTo(-4.6, 0.4);
+  ctx.moveTo(-6.2, 0);
+  ctx.lineTo(-7.0, -0.35);
+  ctx.stroke();
 
   // Heckausleger-Details, Stabilator und Heckpylon
   ctx.fillStyle = BODY_DARK;
@@ -227,13 +277,32 @@ export function drawBlackhawk(ctx, anim) {
     ctx.fill();
     ctx.save();
     ctx.rotate(a);
-    ctx.fillStyle = "rgba(20,20,20,0.75)";
-    rr(ctx, 0.4, -0.27, ROTOR_R - 0.4, 0.54, 0.2);
+    // Blatt mit Profil: Vorderkante hell, Hinterkante dunkel, nach außen leicht durchscheinend (Bewegung)
+    const bg = ctx.createLinearGradient(0, -0.27, 0, 0.27);
+    bg.addColorStop(0, "rgba(90,95,90,0.85)");
+    bg.addColorStop(0.5, "rgba(28,30,28,0.8)");
+    bg.addColorStop(1, "rgba(15,15,15,0.7)");
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.moveTo(0.4, -0.22);
+    ctx.lineTo(ROTOR_R - 0.3, -0.27);
+    ctx.quadraticCurveTo(ROTOR_R + 0.15, 0, ROTOR_R - 0.3, 0.27);
+    ctx.lineTo(0.4, 0.22);
+    ctx.closePath();
     ctx.fill();
     ctx.fillStyle = "rgba(230,200,40,0.85)"; // gelbe Blattspitze
-    ctx.fillRect(ROTOR_R - 0.6, -0.27, 0.6, 0.54);
+    ctx.fillRect(ROTOR_R - 0.75, -0.26, 0.5, 0.52);
     ctx.restore();
   }
+  // Blattspitzenkreis
+  ctx.strokeStyle = "rgba(230,200,40,0.16)";
+  ctx.lineWidth = 0.35;
+  circle(ctx, 0, 0, ROTOR_R - 0.5);
+  ctx.stroke();
+  // Rotorkopf mit Blattanschlüssen
+  ctx.fillStyle = "#4a4f48";
+  circle(ctx, 0, 0, 0.9);
+  ctx.fill();
   ctx.fillStyle = "#2a2f29";
   circle(ctx, 0, 0, 0.6);
   ctx.fill();

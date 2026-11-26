@@ -271,81 +271,127 @@ export function damageFx(b, dt) {
 
 // ---------- Flugkörper zeichnen ----------
 
-function drawExocetBody(ctx, t) {
-  const fl = 0.7 + Math.sin(t * 60) * 0.25;
-  // Flamme
-  const g = ctx.createLinearGradient(-2.6, 0, -2.6 - 3 * fl, 0);
-  g.addColorStop(0, "rgba(255,255,220,0.95)");
-  g.addColorStop(0.4, "rgba(255,170,50,0.8)");
-  g.addColorStop(1, "rgba(255,90,20,0)");
+// Triebwerksstrahl: weißer Kern, gelb-oranger Mantel, flackernd
+function plume(ctx, x, r, len, t, seed) {
+  const fl = 0.75 + Math.sin(t * 60 + seed) * 0.15 + Math.sin(t * 37 + seed * 2) * 0.1;
+  const L = len * fl;
+  const g = ctx.createLinearGradient(x, 0, x - L, 0);
+  g.addColorStop(0, "rgba(255,255,240,1)");
+  g.addColorStop(0.15, "rgba(255,220,120,0.95)");
+  g.addColorStop(0.5, "rgba(255,140,40,0.6)");
+  g.addColorStop(1, "rgba(255,80,20,0)");
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.moveTo(-2.5, -0.25);
-  ctx.lineTo(-2.6 - 3.2 * fl, 0);
-  ctx.lineTo(-2.5, 0.25);
-  ctx.fill();
-  // Flügel (kreuzförmig, von oben zwei sichtbar)
-  ctx.fillStyle = "#9aa3a8";
-  ctx.beginPath();
-  ctx.moveTo(0.4, 0);
-  ctx.lineTo(-0.9, -1.0);
-  ctx.lineTo(-1.4, -1.0);
-  ctx.lineTo(-1.1, 0);
-  ctx.lineTo(-1.4, 1.0);
-  ctx.lineTo(-0.9, 1.0);
+  ctx.moveTo(x, -r);
+  ctx.quadraticCurveTo(x - L * 0.4, -r * 1.6, x - L, 0);
+  ctx.quadraticCurveTo(x - L * 0.4, r * 1.6, x, r);
   ctx.closePath();
   ctx.fill();
-  // Leitwerk
+  // Glühen
+  const gl = ctx.createRadialGradient(x - r, 0, 0, x - r, 0, r * 5);
+  gl.addColorStop(0, "rgba(255,200,100,0.45)");
+  gl.addColorStop(1, "rgba(255,150,50,0)");
+  ctx.fillStyle = gl;
   ctx.beginPath();
-  ctx.moveTo(-1.9, 0);
-  ctx.lineTo(-2.4, -0.6);
-  ctx.lineTo(-2.6, -0.6);
-  ctx.lineTo(-2.5, 0);
-  ctx.lineTo(-2.6, 0.6);
-  ctx.lineTo(-2.4, 0.6);
+  ctx.arc(x - r, 0, r * 5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function body(ctx, x0, x1, r, col) {
+  const g = ctx.createLinearGradient(0, -r, 0, r);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(0.3, col);
+  g.addColorStop(0.75, "rgba(120,128,134,1)");
+  g.addColorStop(1, "#5d656b");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.roundRect(x0, -r, x1 - x0, r * 2, r * 0.6);
+  ctx.fill();
+}
+
+function fins(ctx, x, span, chord, col) {
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x - chord * 0.6, -span);
+  ctx.lineTo(x - chord, -span);
+  ctx.lineTo(x - chord * 0.8, 0);
+  ctx.lineTo(x - chord, span);
+  ctx.lineTo(x - chord * 0.6, span);
   ctx.closePath();
   ctx.fill();
-  // Rumpf
-  ctx.fillStyle = "#e9edef";
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
   ctx.beginPath();
-  ctx.roundRect(-2.6, -0.2, 4.6, 0.4, 0.18);
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x - chord * 0.6, -span);
+  ctx.lineTo(x - chord * 0.7, -span);
+  ctx.lineTo(x - chord * 0.15, 0);
+  ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = "#3b4246";
+}
+
+function drawExocetBody(ctx, t) {
+  plume(ctx, -2.6, 0.22, 3.4, t, 1);
+  fins(ctx, 0.3, 1.0, 1.6, "#8f989e");
+  fins(ctx, -1.9, 0.62, 0.7, "#8f989e");
+  body(ctx, -2.6, 2.0, 0.21, "#e9edef");
+  // Suchkopf
+  const n = ctx.createLinearGradient(2.0, -0.2, 2.8, 0.2);
+  n.addColorStop(0, "#5a6268");
+  n.addColorStop(1, "#22282c");
+  ctx.fillStyle = n;
   ctx.beginPath();
-  ctx.moveTo(2.0, -0.2);
-  ctx.quadraticCurveTo(2.7, 0, 2.0, 0.2);
+  ctx.moveTo(2.0, -0.21);
+  ctx.quadraticCurveTo(2.85, -0.05, 2.9, 0);
+  ctx.quadraticCurveTo(2.85, 0.05, 2.0, 0.21);
+  ctx.closePath();
   ctx.fill();
   ctx.fillStyle = "#c9a227";
-  ctx.fillRect(0.9, -0.2, 0.18, 0.4);
+  ctx.fillRect(0.9, -0.21, 0.16, 0.42);
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(-0.8, -0.21, 0.06, 0.42);
 }
 
 function drawRamBody(ctx, t) {
-  const fl = 0.7 + Math.sin(t * 70) * 0.3;
-  ctx.fillStyle = "rgba(255,210,120,0.85)";
-  ctx.beginPath();
-  ctx.moveTo(-1.3, -0.12);
-  ctx.lineTo(-1.3 - 2 * fl, 0);
-  ctx.lineTo(-1.3, 0.12);
-  ctx.fill();
-  ctx.fillStyle = "#a4adb2";
-  ctx.fillRect(-1.3, -0.4, 0.35, 0.8);
-  ctx.fillStyle = "#f2f4f5";
-  ctx.beginPath();
-  ctx.roundRect(-1.3, -0.11, 2.6, 0.22, 0.1);
-  ctx.fill();
+  plume(ctx, -1.3, 0.12, 2.2, t, 2);
+  fins(ctx, -0.9, 0.42, 0.45, "#a4adb2");
+  body(ctx, -1.3, 1.25, 0.12, "#f4f6f7");
   ctx.fillStyle = "#2c3236";
   ctx.beginPath();
-  ctx.arc(1.3, 0, 0.11, -Math.PI / 2, Math.PI / 2);
+  ctx.moveTo(1.25, -0.12);
+  ctx.quadraticCurveTo(1.6, 0, 1.25, 0.12);
+  ctx.closePath();
   ctx.fill();
+  // Leitflächen am Kopf (Canards)
+  ctx.fillStyle = "#a4adb2";
+  ctx.fillRect(0.7, -0.3, 0.18, 0.6);
 }
 
 export function drawProjectiles(ctx, projs, t, zoom) {
   // kleine Objekte bei weitem Zoom etwas vergrößern, damit sie sichtbar bleiben
   const boost = Math.max(1, 2.2 / zoom);
+  // Schatten auf dem Wasser (nur Flugkörper in der Höhe)
+  for (const q of projs) {
+    if (!q.z || q.z < 15 || q.type === PROJ.SHELL || q.type === PROJ.BULLET) continue;
+    const off = Math.min(90, 2 + Math.sqrt(q.z) * 1.6);
+    ctx.save();
+    ctx.translate(q.x + off * 0.55, q.y + off);
+    ctx.rotate(q.h);
+    ctx.fillStyle = `rgba(0,15,30,${Math.max(0.08, 0.3 - q.z / 8000)})`;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 2.6 * boost, 0.35 * boost, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
   for (const q of projs) {
     ctx.save();
     ctx.translate(q.x, q.y);
     ctx.rotate(q.h);
+    // in großer Höhe etwas größer (Perspektive)
+    if (q.z > 200) {
+      const zs = 1 + Math.min(0.35, q.z / 6000);
+      ctx.scale(zs, zs);
+    }
     if (q.type === PROJ.ROCKET) {
       ctx.fillStyle = "rgba(255,190,90,0.9)";
       ctx.fillRect(-4 * boost, -0.25 * boost, 2.4 * boost, 0.5 * boost);

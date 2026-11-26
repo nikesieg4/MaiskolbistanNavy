@@ -16,7 +16,7 @@ function circle(ctx, x, y, r) {
   ctx.arc(x, y, r, 0, Math.PI * 2);
 }
 
-function hullPath(ctx, inset = 0) {
+export function hullPath(ctx, inset = 0) {
   const b = HB - inset;
   ctx.beginPath();
   ctx.moveTo(-HL + inset, -b + 1.5);

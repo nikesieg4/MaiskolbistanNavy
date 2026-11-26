@@ -506,7 +506,7 @@ function onSnapshot(m) {
   if (!me) return;
   state.myHp = me[11];
   state.myProt = me[12] === 1;
-  const server = { x: me[1], y: me[2], h: me[3], v: me[4], w: me[5] };
+  const server = { x: me[1], y: me[2], h: me[3], v: me[4], w: me[5], z: me[20] ?? 0, zt: me[21] ?? 0 };
   if (!state.pred) {
     state.pred = { ...server };
     state.prevPred = { ...server };
@@ -545,7 +545,10 @@ setInterval(() => {
 
 function fixedStep() {
   if (!state.pred) return;
-  const input = { s: ++state.seq, th: Math.round(state.throttle * 100) / 100, ru: Math.round(state.rudder * 100) / 100 };
+  const upKey = keys.has("q") || keys.has("pageup");
+  const downKey = keys.has("c") || keys.has("pagedown");
+  const up = isAir(DEF) ? (upKey ? 1 : 0) - (downKey ? 1 : 0) : 0;
+  const input = { s: ++state.seq, th: Math.round(state.throttle * 100) / 100, ru: Math.round(state.rudder * 100) / 100, up };
   state.history.push(input);
   if (state.history.length > 120) state.history.shift();
   state.prevPred = { ...state.pred };
@@ -595,6 +598,7 @@ function interpolatedBoats(br) {
       radar: pb[13] === 1,
       radarOn: pb[16] === 1,
       pod: pb[17] || 0,
+      z: lerp(pa[20] || 0, pb[20] || 0, t),
       jam: pb[18] === 1,
       hp: pb[11] ?? 100,
       prot: pb[12] === 1,
@@ -610,10 +614,10 @@ function interpolatedProjectiles(br) {
   for (const [id, qb] of b.projs) {
     const qa = a.projs.get(id);
     if (!qa) {
-      out.push({ id, type: qb[1], x: qb[2], y: qb[3], h: qb[4] });
+      out.push({ id, type: qb[1], x: qb[2], y: qb[3], h: qb[4], z: qb[5] || 0 });
       continue;
     }
-    out.push({ id, type: qb[1], x: lerp(qa[2], qb[2], t), y: lerp(qa[3], qb[3], t), h: lerpAngle(qa[4], qb[4], t) });
+    out.push({ id, type: qb[1], x: lerp(qa[2], qb[2], t), y: lerp(qa[3], qb[3], t), h: lerpAngle(qa[4], qb[4], t), z: lerp(qa[5] || 0, qb[5] || 0, t) });
   }
   return out;
 }
@@ -1056,6 +1060,8 @@ function render(now) {
       y: lerp(pp.y, state.pred.y, a) + state.errY,
       h: lerpAngle(pp.h, state.pred.h, a) + state.errH,
       v: lerp(pp.v, state.pred.v, a),
+      z: lerp(pp.z || 0, state.pred.z || 0, a),
+      zt: state.pred.zt || 0,
       th: state.throttle,
       type: state.myType,
       hp: state.myHp ?? DEF.hp,
@@ -1166,7 +1172,7 @@ function render(now) {
     fb.navAng = (fb.navAng ?? (b.id * 1.7) % 6.28) + dtFx * radarSpeed;
     fb.domeAng = (fb.domeAng ?? 0) + dtFx * (b.radar ? 3 : 0.45);
     const flag = TEAMS[teamOf(b.id)].flag;
-    drawVehicle(ctx, b.type, { t, seed: b.id * 7919, gun: tu.gun, ram: tu.ram, ammo, radarAngle: fb.navAng, domeAngle: fb.domeAng, flag });
+    drawVehicle(ctx, b.type, { t, h: b.h, seed: b.id * 7919, gun: tu.gun, ram: tu.ram, ammo, radarAngle: fb.navAng, domeAngle: fb.domeAng, flag });
     ctx.restore();
     combat.damageFx({ ...b, hp: (b.hp / BOATS[b.type].hp) * 100 }, dtFx);
   }
@@ -1175,11 +1181,16 @@ function render(now) {
   combat.drawEffectsAbove(ctx);
 
   // Luftfahrzeuge fliegen über allem: erst Schatten (Drohnen fliegen höher), dann das Fahrzeug
+  // Schatten liegt auf dem Wasser: je höher, desto weiter versetzt, größer und blasser
   for (const b of helis) {
-    const high = BOATS[b.type].kind === "drone";
+    const z = b.z || 0;
+    const off = Math.min(90, 2 + Math.sqrt(z) * 1.6);
     ctx.save();
-    ctx.translate(b.x + (high ? 14 : 5), b.y + (high ? 22 : 8));
+    ctx.translate(b.x + off * 0.55, b.y + off);
     ctx.rotate(b.h);
+    const sc = 1 + Math.min(0.5, z / 4000);
+    ctx.scale(sc, sc);
+    ctx.globalAlpha = Math.max(0.25, 1 - z / 5000);
     drawAirShadow(ctx, b.type);
     ctx.restore();
   }
@@ -1187,6 +1198,9 @@ function render(now) {
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.h);
+    // Perspektive: Luftfahrzeuge wirken in der Höhe etwas größer
+    const zs = 1 + Math.min(0.35, (b.z || 0) / 6000);
+    ctx.scale(zs, zs);
     if (b.prot) ctx.globalAlpha = 0.55 + Math.sin(t * 10) * 0.25;
     const mine = b.id === state.myId;
     const ammo = mine && info ? info.w : undefined;
@@ -1194,7 +1208,7 @@ function render(now) {
     const jamOn = mine ? jamIdx >= 0 && info && info.w[jamIdx] && info.w[jamIdx][1] > 0 : b.jam;
     if (jamOn) drawJamRings(b, t);
     drawVehicle(ctx, b.type, {
-      t, seed: b.id * 7919, ammo, jamOn,
+      t, h: b.h, seed: b.id * 7919, ammo, jamOn,
       weapons: mine ? state.myWeapons : undefined,
       pod: mine ? undefined : b.pod || undefined,
       gunner: mine ? me.gunner : Math.PI / 2,
@@ -1229,7 +1243,8 @@ function render(now) {
     const sx = w / 2 + (b.x - cam.x) * zoom;
     const bdef = BOATS[b.type];
     const sy = h / 2 + (b.y - cam.y) * zoom - Math.max(24, Math.max(bdef.length * 0.55, bdef.beam * 0.6) * zoom);
-    drawNameTag(state.names.get(b.id) || "?", sx, sy - 8, b.id === state.myId, teamOf(b.id));
+    const altTxt = isAir(bdef) && !(b.id === state.myId && state.landed) ? `  ▲${Math.round(b.z || 0)} m` : "";
+    drawNameTag((state.names.get(b.id) || "?") + altTxt, sx, sy - 8, b.id === state.myId, teamOf(b.id));
     drawHpBar(sx, sy - 4, b.hp / bdef.hp);
   }
   // Zeiger-Hinweis: Geschütz kann dort nicht hin
@@ -1326,6 +1341,14 @@ function updateHud(me) {
   $("hpFill").style.width = `${clamp(me.hp / DEF.hp, 0, 1) * 100}%`;
   $("hpText").textContent = `${Math.max(0, Math.ceil(me.hp))} / ${DEF.hp}`;
   $("speed").textContent = `${(me.v * MS_TO_KN).toFixed(1)} kn`;
+  $("altRow").hidden = !isAir(DEF);
+  if (isAir(DEF)) {
+    const z = Math.round(me.z || 0);
+    const zt = Math.round(me.zt || 0);
+    const low = z < 60 && !state.landed;
+    $("alt").textContent = state.landed ? "am Boden" : `${z} m${Math.abs(zt - z) > 5 ? ` → ${zt} m` : ""}`;
+    $("altNote").textContent = low ? "Tiefflug – unter dem Radar" : z > 3500 ? "außer Reichweite von RAM/Stinger" : "";
+  }
   const deg = Math.round(((me.h * 180) / Math.PI + 90 + 360) % 360);
   $("heading").textContent = `${String(deg).padStart(3, "0")}°`;
   $("pos").textContent = `${Math.round(me.x)} / ${Math.round(-me.y)}`;

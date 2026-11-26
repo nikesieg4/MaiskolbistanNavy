@@ -76,6 +76,7 @@ export const BOATS = {
     slots: { 1: ["marte", "stinger_aa", "rkt70"] },
     length: 19.6, beam: 16.3, maxSpeed: 74, maxReverse: 0.35, accel: 16, decel: 22, turnRate: 1.45,
     hitRadius: 8, hp: 45, sensor: 1600, sig: 0.6,
+    alt: { min: 15, max: 1500, cruise: 120, climb: 14 },
   },
   heron: {
     typeId: 6, team: 0, kind: "drone", level: 1, price: 0,
@@ -84,6 +85,7 @@ export const BOATS = {
     slots: { 0: ["armiger", "jammer"] },
     length: 14, beam: 26, maxSpeed: 62, minSpeed: 26, maxReverse: 0, accel: 10, decel: 10, turnRate: 0.55,
     hitRadius: 9, hp: 25, sensor: 3400, sig: 0.45,
+    alt: { min: 150, max: 6000, cruise: 1800, climb: 12 },
   },
   // ---------------- Paprikistan ----------------
   cyclone: {
@@ -143,6 +145,7 @@ export const BOATS = {
     slots: { 1: ["hellfire", "stinger_aa", "rkt70"] },
     length: 19.8, beam: 16.4, maxSpeed: 72, maxReverse: 0.35, accel: 16, decel: 22, turnRate: 1.5,
     hitRadius: 8, hp: 40, sensor: 1600, sig: 0.6,
+    alt: { min: 15, max: 1500, cruise: 120, climb: 14 },
   },
   reaper: {
     typeId: 11, team: 1, kind: "drone", level: 1, price: 0,
@@ -151,6 +154,7 @@ export const BOATS = {
     slots: { 0: ["harm", "jammer", "hellfire"] },
     length: 11, beam: 20, maxSpeed: 68, minSpeed: 28, maxReverse: 0, accel: 11, decel: 11, turnRate: 0.6,
     hitRadius: 8, hp: 25, sensor: 3300, sig: 0.45,
+    alt: { min: 150, max: 6000, cruise: 1800, climb: 12 },
   },
 };
 export const TYPE_BY_ID = [];
@@ -182,20 +186,20 @@ export const ECONOMY = {
 
 // Waffen. kind: gun (Rohrwaffe), ssm (Seezielflugkörper), sam (Flugabwehr), mg, agm (Luft-Boden).
 export const WEAPONS = {
-  gun76: { kind: "gun", label: "76 mm OTO Melara", auto: true, reload: 0.6, speed: 320, range: 2200, damage: 6, spread: 0.012 },
-  gun25: { kind: "gun", label: "25 mm Mk 38", auto: true, reload: 0.15, speed: 460, range: 1300, damage: 1.6, spread: 0.02 },
-  gun57: { kind: "gun", label: "57 mm Mk 110", auto: true, reload: 0.35, speed: 380, range: 2000, damage: 4, spread: 0.015 },
-  gun127: { kind: "gun", label: "127 mm Mk 45", auto: true, reload: 1.3, speed: 300, range: 3000, damage: 13, spread: 0.01 },
+  gun76: { ceiling: 3000, kind: "gun", label: "76 mm OTO Melara", auto: true, reload: 0.6, speed: 320, range: 2200, damage: 6, spread: 0.012 },
+  gun25: { ceiling: 1500, kind: "gun", label: "25 mm Mk 38", auto: true, reload: 0.15, speed: 460, range: 1300, damage: 1.6, spread: 0.02 },
+  gun57: { ceiling: 2600, kind: "gun", label: "57 mm Mk 110", auto: true, reload: 0.35, speed: 380, range: 2000, damage: 4, spread: 0.015 },
+  gun127: { ceiling: 4000, kind: "gun", label: "127 mm Mk 45", auto: true, reload: 1.3, speed: 300, range: 3000, damage: 13, spread: 0.01 },
   exocet: { kind: "ssm", label: "MM38 Exocet", reload: 15, interval: 0.6, speed: 140, turn: 1.0, range: 4200, damage: 40, seekerRange: 1200, seekerCone: 0.6 },
   rbs15: { kind: "ssm", label: "RBS 15 Mk3", reload: 16, interval: 0.6, speed: 150, turn: 1.0, range: 5000, damage: 45, seekerRange: 1300, seekerCone: 0.6 },
   harpoon: { kind: "ssm", label: "RGM-84 Harpoon", reload: 18, interval: 0.5, speed: 145, turn: 1.0, range: 5000, damage: 45, seekerRange: 1300, seekerCone: 0.6 },
   nsm: { kind: "ssm", label: "Naval Strike Missile", reload: 16, interval: 0.5, speed: 150, turn: 1.4, range: 4800, damage: 42, seekerRange: 1400, seekerCone: 0.7 },
   griffin: { kind: "ssm", label: "Griffin", reload: 8, interval: 0.35, speed: 170, turn: 2.0, range: 2600, damage: 16, seekerRange: 900, seekerCone: 0.6 },
-  ram: { kind: "sam", label: "RAM Luftabwehr", magazine: 21, reload: 4, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
-  searam: { kind: "sam", label: "SeaRAM", magazine: 11, reload: 3.5, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
-  stinger: { kind: "sam", label: "Stinger", magazine: 8, reload: 5, interval: 0.5, speed: 260, turn: 3.6, range: 1100, damage: 3, seekerRange: 1000, pk: 0.6 },
-  sm2: { kind: "sam", label: "SM-2 Standard", magazine: 32, reload: 6, interval: 0.6, speed: 300, turn: 2.2, range: 3800, damage: 8, seekerRange: 3000, pk: 0.75 },
-  mg: { kind: "mg", label: "Türschützen-MG", auto: true, reload: 0.09, speed: 520, range: 800, damage: 0.6, heliDamage: 1.2, spread: 0.035 },
+  ram: { ceiling: 3000, kind: "sam", label: "RAM Luftabwehr", magazine: 21, reload: 4, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
+  searam: { ceiling: 3000, kind: "sam", label: "SeaRAM", magazine: 11, reload: 3.5, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
+  stinger: { ceiling: 3500, kind: "sam", label: "Stinger", magazine: 8, reload: 5, interval: 0.5, speed: 260, turn: 3.6, range: 1100, damage: 3, seekerRange: 1000, pk: 0.6 },
+  sm2: { ceiling: 15000, kind: "sam", label: "SM-2 Standard", magazine: 32, reload: 6, interval: 0.6, speed: 300, turn: 2.2, range: 8000, damage: 8, seekerRange: 3000, pk: 0.75 },
+  mg: { ceiling: 1000, kind: "mg", label: "Türschützen-MG", auto: true, reload: 0.09, speed: 520, range: 800, damage: 0.6, heliDamage: 1.2, spread: 0.035 },
   hellfire: {
     kind: "agm", label: "AGM-114 Hellfire", count: 8, reload: 6, interval: 0.4, speed: 210, turn: 2.4, range: 3000, damage: 14,
     seekerRange: 900, seekerCone: 0.55, rails: [{ x: -1.2, y: -3.4 }, { x: -1.2, y: 3.4 }],
@@ -216,7 +220,7 @@ export const WEAPONS = {
   },
   // Hangar-Bewaffnung für Hubschrauber
   stinger_aa: {
-    kind: "sam", label: "Stinger (Luft-Luft)", magazine: 4, reload: 10, interval: 0.6, speed: 260, turn: 3.6, range: 1300, damage: 3,
+    ceiling: 3500, kind: "sam", label: "Stinger (Luft-Luft)", magazine: 4, reload: 10, interval: 0.6, speed: 260, turn: 3.6, range: 1300, damage: 3,
     seekerRange: 1100, pk: 0.65, rails: [{ x: -0.5, y: -2.6 }, { x: -0.5, y: 2.6 }],
   },
   rkt70: {
@@ -258,6 +262,18 @@ export const PROJ_OF_KIND = { gun: 1, ssm: 2, sam: 3, mg: 4, agm: 5, arm: 6, rkt
 export const INTERCEPTABLE = new Set([2, 5, 6]);
 
 // ---------- Sensoren ----------
+// ---------- Höhe ----------
+export const ALTITUDE = {
+  lowFly: 60, // darunter: „unter dem Radar“
+  lowSig: 0.35, // Signatur im Tiefflug gegenüber Radar (Sicht bleibt)
+  landHeli: 30, // Hubschrauber landen/retten nur darunter
+  landDrone: 250, // Drohnen setzen nur unterhalb dieser Höhe auf
+  captureHeli: 300,
+  seaSkim: 5, // Flughöhe der Seezielflugkörper
+  hitShip: 40, // Flugkörper treffen Schiffe nur unterhalb dieser Höhe
+  shipZ: 8, // Abschusshöhe auf Schiffen
+};
+
 export const SENSORS = {
   radarOffFactor: 0.4, // eigene Reichweite bei ausgeschaltetem Radar (nur Sicht)
   radarOffSig: 0.6, // eigene Signatur bei ausgeschaltetem Radar
@@ -268,14 +284,16 @@ export const SENSORS = {
   ghost: 12, // s: zuletzt gesehene Kontakte
 };
 
-// Erfassungsreichweite einer Einheit
-export function sensorRange(def, radarOn, abilityRadar) {
-  if (abilityRadar) return Math.max(SENSORS.radarAbility, def.sensor);
-  if (def.kind === "ship" && !radarOn) return def.sensor * SENSORS.radarOffFactor;
-  return def.sensor;
+// Erfassungsreichweite einer Einheit (Luftfahrzeuge: weiter, je höher sie fliegen – Radarhorizont)
+export function sensorRange(def, radarOn, abilityRadar, z = 0) {
+  let r = def.sensor;
+  if (def.alt) r *= 0.55 + 0.45 * Math.min(1, Math.sqrt(Math.max(0, z) / (def.alt.max * 0.5)));
+  if (abilityRadar) return Math.max(SENSORS.radarAbility, r);
+  if (def.kind === "ship" && !radarOn) return r * SENSORS.radarOffFactor;
+  return r;
 }
-export function signature(def, radarOn) {
-  if (def.kind !== "ship") return def.sig;
+export function signature(def, radarOn, z = 0) {
+  if (def.kind !== "ship") return def.sig * (z < ALTITUDE.lowFly ? ALTITUDE.lowSig : 1);
   return def.sig * (radarOn ? SENSORS.emitterBonus : SENSORS.radarOffSig);
 }
 
@@ -660,6 +678,14 @@ export function stepHeli(b, input, def) {
   const a = Math.abs(target) > Math.abs(b.v) ? def.accel : def.decel;
   b.v += clamp(dv, -a * DT, a * DT);
   b.w += (ru * def.turnRate - b.w) * Math.min(1, DT * 5);
+  // Höhe: Q/C verschieben die Sollhöhe, die Ist-Höhe folgt mit der Steigrate
+  if (def.alt) {
+    const A = def.alt;
+    if (b.zt === undefined) b.zt = A.cruise;
+    if (b.z === undefined) b.z = A.cruise;
+    b.zt = clamp(b.zt + clamp(+input.up || 0, -1, 1) * A.climb * 1.6 * DT, A.min, A.max);
+    b.z += clamp(b.zt - b.z, -A.climb * DT, A.climb * DT);
+  }
   b.h = wrapAngle(b.h + b.w * DT);
   b.x += Math.cos(b.h) * b.v * DT;
   b.y += Math.sin(b.h) * b.v * DT;

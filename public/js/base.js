@@ -210,17 +210,17 @@ function drawAirfield(ctx, base, t) {
   for (const hp of A.helipads) {
     ctx.fillStyle = "#5d605e";
     ctx.beginPath();
-    ctx.arc(hp.x, hp.y, 24, 0, Math.PI * 2);
+    ctx.arc(hp.x, hp.y, 15, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "rgba(240,200,60,0.9)";
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(hp.x, hp.y, 19, 0, Math.PI * 2);
+    ctx.arc(hp.x, hp.y, 12.5, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = "#f2f2f2";
-    ctx.fillRect(hp.x - 8, hp.y - 9, 3, 18);
-    ctx.fillRect(hp.x + 5, hp.y - 9, 3, 18);
-    ctx.fillRect(hp.x - 8, hp.y - 1.5, 16, 3);
+    ctx.fillStyle = "rgba(242,242,242,0.85)";
+    ctx.fillRect(hp.x - 5, hp.y - 6, 2, 12);
+    ctx.fillRect(hp.x + 3, hp.y - 6, 2, 12);
+    ctx.fillRect(hp.x - 5, hp.y - 1, 10, 2);
   }
   // Windsack (weht)
   ctx.save();

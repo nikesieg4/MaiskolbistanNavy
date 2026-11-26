@@ -66,6 +66,15 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
   Locks auf Ziele in der Nähe bauen sich nicht auf, gelenkte Flugkörper können ihr Ziel verlieren. Der Störer sendet
   selbst – ARM können sich auf ihn aufschalten.
 
+## Höhe (Hubschrauber, Drohnen, Flugkörper)
+- **Q** steigen, **C** sinken (Sollhöhe, die Ist-Höhe folgt mit der Steigrate). Hubschrauber 15–1.500 m, Drohnen 150–6.000 m.
+- Höher = größere Sensorreichweite (Radarhorizont). Unter 60 m fliegt man „unter dem Radar“ und wird viel schwerer entdeckt.
+- Gipfelhöhen gegen Luftziele: MG 1.000 m, 25 mm 1.500 m, 57 mm 2.600 m, 76 mm 3.000 m, 127 mm 4.000 m,
+  RAM/SeaRAM 3.000 m, Stinger 3.500 m, SM-2 15.000 m – eine hoch fliegende Drohne holt nur die SM-2 (F124, Burke) herunter.
+- Landen, Seenotrettung (Hubschrauber unter 30 m, Drohnen unter 250 m) und Eroberung (Hubschrauber unter 300 m) nur in Bodennähe.
+- Seezielflugkörper fliegen im Tiefflug, Luft-Boden-Raketen und ARM gleiten zum Ziel hinab, Flugabwehr steigt auf Zielhöhe.
+- Der Schatten auf dem Wasser wandert mit der Höhe, das Namensschild zeigt die Flughöhe.
+
 ## Radarwarnanlage
 - **Lock-Warnung:** gelbe Peilmarke während ein Gegner aufschaltet, blinkendes „⚠ LOCK“ und rote Marke, sobald der Lock steht –
   auch wenn du den Gegner selbst nicht siehst.
@@ -86,6 +95,7 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 | E | Fähigkeit: Radar-Rundumsuche (Schiffe, Drohnen) bzw. Täuschkörper (Hubschrauber) |
 | T | Radar ein/aus (Schiffe) |
 | H | Hangar (gelandet) |
+| Q / C | Höhe: steigen / sinken (Hubschrauber, Drohnen) |
 | B | Schiffsladen (im eigenen Hafen) |
 | Mausrad | Zoom |
 
