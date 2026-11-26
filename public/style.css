@@ -234,3 +234,44 @@ body.missileAlert::after { content: ""; position: fixed; inset: 0; pointer-event
 #zoomBtns svg, #chatBtn svg { width: 26px; height: 26px; display: block; fill: none; stroke: #fff; stroke-width: 2.6;
   stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 #chatBtn svg { width: 24px; height: 24px; stroke-width: 2; }
+
+/* Konto, Saison */
+.acctbox { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); text-align: left; }
+.acctHead { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.rankbadge { display: inline-block; min-width: 34px; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 800; text-align: center;
+  color: #10202e; background: linear-gradient(#ffe38a, #c9a227); border: 1px solid #8a6d12; }
+.rankbadge.r0 { background: linear-gradient(#d9e2e8, #9fb1bd); border-color: #66798a; }
+.rankbadge.r1 { background: linear-gradient(#cfe7ff, #7fb2e0); border-color: #3f6f9c; }
+.rankbadge.r3, .rankbadge.r4 { background: linear-gradient(#fff2b8, #e0b23a); box-shadow: 0 0 6px rgba(255,215,94,.5); }
+.xpbar { height: 6px; margin: 6px 0 3px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+.xpbar div { height: 100%; background: linear-gradient(90deg, #5fd3ff, #ffd75e); }
+.acctbox small { display: block; font-size: 12px; opacity: .8; line-height: 1.45; }
+.acctbox .guesthint { margin-top: 4px; color: #ffd75e; opacity: .85; }
+#acctBtns { display: flex; gap: 8px; margin-top: 8px; }
+#acctBtns button, .authrow button { flex: 1; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08);
+  color: #eaf2f7; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+#acctBtns button:hover, .authrow button:hover { background: rgba(255,255,255,.16); }
+#acctBtns button[hidden] { display: none; }
+#authForm { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+#authForm[hidden] { display: none; }
+#authForm input { font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.25); color: #fff; user-select: text; }
+#authForm input[hidden] { display: none; }
+.authtitle { font-weight: 800; }
+.authrow { display: flex; gap: 8px; }
+#authSubmit { background: #ffd75e; color: #10202e; border-color: #ffd75e; }
+#authMsg { color: #ffb3a6; opacity: 1; min-height: 1em; }
+.authnote { opacity: .6 !important; }
+.medals { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.medal { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font-size: 10px; font-weight: 800; color: #10202e;
+  border: 2px solid #fff3c4; box-shadow: 0 0 4px rgba(255,215,94,.6); }
+.seasonbox { margin: 0 0 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255,215,94,.08); border: 1px solid rgba(255,215,94,.25); text-align: left; font-size: 14px; }
+.seasonbox .seasoninfo { display: block; font-size: 12px; opacity: .8; margin-top: 3px; line-height: 1.4; }
+.spawnopt.buy { border-style: dashed; }
+#name:disabled { opacity: .7; }
+/* HUD: Treibstoff, Nachbrenner */
+.fuelbar { height: 5px; margin: 2px 0 4px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+.fuelbar[hidden] { display: none; }
+#fuelBar { height: 100%; background: linear-gradient(90deg, #ef4b3a, #f0c330 30%, #5fd35f 60%); }
+#abNote { color: #ffb347; font-weight: 800; font-size: 12px; text-shadow: 0 0 6px rgba(255,140,40,.7); }
+#abNote[hidden] { display: none; }
+#altRow[hidden], #fuelRow[hidden], #sonarRow[hidden] { display: none; }

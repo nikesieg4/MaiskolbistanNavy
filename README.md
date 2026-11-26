@@ -66,6 +66,80 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
   Locks auf Ziele in der Nähe bauen sich nicht auf, gelenkte Flugkörper können ihr Ziel verlieren. Der Störer sendet
   selbst – ARM können sich auf ihn aufschalten.
 
+## Konto (sicher)
+- **Gast:** ohne Anmeldung, Fortschritt nur in diesem Browser (zufälliger Schlüssel im `localStorage`).
+- **Registrieren / Anmelden** im Startmenü mit Name (3–16 Zeichen) und Passwort (mind. 8 Zeichen). Beim Registrieren wird der Gast-Fortschritt übernommen.
+- Sicherheit:
+  - Passwörter nur als **PBKDF2-SHA-256-Hash** mit 100.000 Runden und eigenem Salz je Konto, nie im Klartext.
+  - Anmeldung über einen **zufälligen 256-Bit-Sitzungsschlüssel**, den nur der Server erzeugt (180 Tage gültig, Abmelden löscht ihn).
+  - Nach der Registrierung ist der alte Gastschlüssel wertlos. Abgemeldete oder abgelaufene Schlüssel geben keinen Zugriff.
+  - Nach 8 Fehlversuchen je Name bzw. IP ist die Anmeldung 15 Minuten gesperrt. Vergleich in konstanter Zeit, gleiche Antwortzeit auch bei unbekanntem Namen.
+  - Registrierte Namen sind geschützt: Gäste mit diesem Namen heißen im Spiel „Gast-123“. Registrierte spielen immer unter ihrem Kontonamen.
+- „Mit Google anmelden“ ist vorbereitet (zweiter Anmeldeweg zum selben Konto) und folgt später.
+
+## Dienstgrade und Erfahrung
+- Erfahrung (EP) = ein Zehntel der im Gefecht verdienten Taler (Abschüsse, Assists, Schaden, Eroberungen, Rettungen).
+- 17 Dienstgrade von Matrose bis Admiral. Der Dienstgrad steht am Namensschild, in der Flottenliste und im HUD.
+- Freischaltungen: Korvette/LCS ab Maat, Träger und U 212A ab Bootsmann, Harrier/F-16/Virginia ab Oberbootsmann,
+  F124/Burke ab Leutnant zur See, Eurofighter/F-35B ab Kapitänleutnant. Dazu braucht man die Taler.
+- Kaufen geht im Startmenü (Klick auf ein noch nicht gekauftes Fahrzeug) oder im Laden (Hafen bzw. Flugfeld).
+
+## Saisons der Frontkarte
+- Eine Saison dauert eine Woche (Montag 0 Uhr UTC). Am Ende gewinnt das Team mit mehr Stützpunkten.
+- Wer für das Siegerteam mindestens 20 EP beigetragen hat, bekommt eine **Medaille** und 5.000 Taler (auch wenn er erst später wieder online ist).
+- Danach wird die Frontkarte zurückgesetzt. Die letzten Sieger stehen im Startmenü.
+
+## Tageszeit und Wetter
+- Ein Tag dauert 24 Minuten (1 Spielstunde = 1 Minute). Nachts ist die Sicht kurz, Schiffe, Basen und Explosionen leuchten.
+- Das Wetter wechselt alle 8 Minuten: klar, bewölkt, Regen, Nebel, Sturm.
+- Wirkung:
+  - Nebel und Nacht verkürzen die Sicht.
+  - Regen und Sturm schwächen das Radar.
+  - Sturm stört das Sonar und bremst Schiffe; kleine Boote bremst er stärker.
+- Uhrzeit und Wetter stehen im HUD.
+
+## Kampfflugzeuge
+| Typ | Nation | Start | Bewaffnung (Hangar-Platz 3 wählbar) |
+|---|---|---|---|
+| Eurofighter Typhoon | Maiskolbistan | Bahn | BK-27, IRIS-T, Meteor / Taurus / GBU-12 |
+| AV-8B Harrier II | Maiskolbistan | Bahn oder Deck der Ähre (Senkrechtstarter) | GAU-12, AIM-9X, GBU-12 / AIM-120 / Marte |
+| F-16C | Paprikistan | Bahn | M61, AIM-9X, AIM-120 / HARM / GBU-12 |
+| F-35B | Paprikistan | Bahn oder Deck der America (Tarnkappe) | GAU-22, AIM-120, GBU-12 / JSM |
+- Steuerung:
+  - **W** Vollschub, **Shift** Nachbrenner, **S** Leerlauf (Senkrechtstarter schweben), **Q/C** Höhe.
+  - Die Bordkanone schießt starr nach vorn.
+- **Treibstoff:**
+  - Der Nachbrenner verbraucht ihn dreifach, Schweben mehr.
+  - Bei 20 % kommt die Warnung „Bingo Fuel“.
+  - Ist er leer, fällt das Triebwerk aus und der Jet stürzt ab.
+  - Landen tankt auf.
+- **Landen:** auf der eigenen Bahn langsam (≤ 95 m/s) unter 250 m. Senkrechtstarter schwebend auf einem Trägerdeck (belegt einen Platz wie ein Hubschrauber).
+- **Luft-Luft:**
+  - IRIS-T und AIM-9X: Infrarot, Täuschkörper wirken sicher.
+  - Meteor und AIM-120: Radar. Mit Lock (R) haben sie große Reichweite, Täuschkörper wirken nur zur Hälfte, Störer brechen sie.
+- **GBU-12:** gleitet aus der Höhe auf Lock-Ziel oder Mauszeiger; je höher der Abwurf, desto weiter fliegt sie.
+- Die F-35B ist schwer zu orten, weil sie ihre Waffen im Rumpfschacht trägt.
+- Jets können nicht erobern.
+
+## U-Boote
+| Typ | Nation | Bewaffnung |
+|---|---|---|
+| U-Boot Klasse 212A | Maiskolbistan | DM2A4-Torpedos, IDAS (Flugabwehr aus dem U-Boot) |
+| Virginia-Klasse | Paprikistan | Mk-48-Torpedos, Harpoon |
+- **Tauchen:** **Q** auftauchen, **C** tiefer. Bis −5 m ist man aufgetaucht, bis −25 m auf Sehrohrtiefe, darunter getaucht.
+- **Getaucht:**
+  - Radar und Sicht orten das U-Boot nicht mehr, nur noch Sonar. Leise und langsam bleibt es lange unentdeckt.
+  - Flugkörper (IDAS, Harpoon) gehen nur auf Sehrohrtiefe, Torpedos in jeder Tiefe.
+- **Sonar** haben F124, Burke, LCS, Korvette, Basis, gehaltene Stützpunkte und NH90/Black Hawk. Die Hubschrauber orten nur mit Tauchsonar, also schwebend unter 60 m.
+- **Leichttorpedos:**
+  - F124 hat MU90, Burke Mk 54.
+  - Hubschrauber können sie im Hangar laden.
+- **Torpedos:**
+  - Sie treffen Schiffe und U-Boote.
+  - Sie lassen sich nicht abfangen.
+  - Der Torpedotäuschkörper (E) lenkt sie mit 70 % Wahrscheinlichkeit ab.
+- Gegnerische U-Boote mit Sonarkontakt erscheinen als blasser Schemen mit gestricheltem Kreis.
+
 ## Chat
 - **Enter** (oder 💬 rechts, fürs iPad) öffnet den Chat, Enter sendet, Esc schließt. **Tab** bzw. der Knopf links wechselt zwischen „Alle“ und „Team“.
 - Höchstens 140 Zeichen, eine Nachricht pro 0,7 s. Die letzten 8 Zeilen stehen links unten und blenden nach 12 s aus.
@@ -108,9 +182,10 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 | T | Radar ein/aus (Schiffe) |
 | H | Hangar (gelandet) |
 | Enter | Chat (Tab: Alle/Team) |
-| Q / C | Höhe: steigen / sinken (Hubschrauber, Drohnen) |
+| Q / C | Höhe: steigen / sinken (Hubschrauber, Drohnen, Jets) · U-Boot: auftauchen / tiefer |
+| Shift | Nachbrenner (Jets, bei Vollschub) |
 | + / − | Zoomen (auch Mausrad, Knöpfe rechts unten fürs iPad, Zwei-Finger-Pinch) |
-| B | Schiffsladen (im eigenen Hafen) |
+| B | Laden (im eigenen Hafen oder gelandet auf dem Flugfeld) |
 | Mausrad | Zoom |
 
 ## Waffen
@@ -150,6 +225,10 @@ public/            Client (wird beim Build in den Worker eingebettet)
   js/aircraft.js   NH90, Heron TP, MQ-9 Reaper
   js/vehicles.js   zeichnet jedes Fahrzeug nach Typ
   js/world.js      Kontinente, Stützpunkte, Frontkarte
+  js/jets.js       Eurofighter, Harrier II, F-16C, F-35B
+  js/subs.js       U 212A, Virginia
+  js/weather.js    Tageszeit, Wetter, Nachtlichter
+  js/account.js    Konto im Menü (Anmelden, Dienstgrad, Medaillen, Saison)
 src/worker.js      Worker (Auslieferung + /ws) und Durable Object `World`
 scripts/build-assets.mjs  Bettet public/ in src/assets.gen.js ein
 ```
@@ -170,6 +249,6 @@ Die Seite erlaubt Einbettung nur auf sich selbst und auf `https://spiele.maiskol
 ```bash
 npm install
 npm run dev      # lokal auf http://localhost:8787
-npx wrangler dev --var DEV_START_MONEY:20000   # lokal mit Startguthaben zum Testen des Ladens
+npx wrangler dev --var DEV_START_MONEY:20000 --var DEV_START_XP:12000   # lokal mit Startguthaben und Dienstgrad zum Testen
 npm run deploy   # auf Cloudflare (wrangler login bzw. CLOUDFLARE_API_TOKEN nötig)
 ```

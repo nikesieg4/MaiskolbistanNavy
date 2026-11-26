@@ -97,6 +97,22 @@ export function spawnEvent(e) {
     case "spray":
       burst(x, y, 3, 3, { r: 0.6, grow: 0.6, life: 0.6, color: "235,248,255", alpha: 0.7, drag: 3 });
       break;
+    case "torp":
+      // Torpedoausstoß: Luftblasen
+      burst(x, y, 10, 6, { r: 0.8, grow: 0.8, life: 1.6, color: "220,240,255", alpha: 0.7, drag: 2 });
+      break;
+    case "torphit":
+      // Wassersäule unter dem Kiel
+      explosion(x, y, 3);
+      rings.push({ x, y, r: 6, grow: 60, age: 0, life: 1.8, color: "235,248,255", width: 3 });
+      burst(x, y, 40, 24, { r: 3, grow: 2.5, life: 2.4, color: "240,250,255", alpha: 0.85, drag: 2 });
+      break;
+    case "torpend":
+      burst(x, y, 6, 4, { r: 0.8, grow: 0.6, life: 1.2, color: "220,240,255", alpha: 0.5, drag: 2 });
+      break;
+    case "decoy":
+      for (let i = 0; i < 4; i++) setTimeout(() => burst(x + rand(-20, 20), y + rand(-20, 20), 10, 8, { r: 1, grow: 1.4, life: 2, color: "220,240,255", alpha: 0.6, drag: 2 }), i * 250);
+      break;
     case "flare":
       // Täuschkörper: helle, fallende Leuchtkugeln seitlich nach hinten
       for (const side of [-1, 1]) {
@@ -125,6 +141,14 @@ export function crashAt(x, y, h) {
   setTimeout(() => splash(x + Math.cos(h) * 8, y + Math.sin(h) * 8, 6), 600);
 }
 
+// Lichtquellen für die Nacht: Mündungsfeuer, Explosionen, brennende Wracks
+export function lightSources() {
+  const out = [];
+  for (const f of flashes) out.push({ x: f.x, y: f.y, r: f.r * 8 });
+  for (const w of wrecks) if (w.age < w.life * 0.7) out.push({ x: w.x, y: w.y, r: 80 });
+  return out;
+}
+
 // Abgasspuren der Flugkörper: durchgehende Rauchfahne, die breiter wird und verblasst
 const trails = new Map(); // id -> { pts: [{x,y,age}], big, alive }
 const TRAIL_LIFE = 2.6;
@@ -135,7 +159,7 @@ export function emitTrails(projs, dt) {
     while (tr.pts.length && tr.pts[0].age > TRAIL_LIFE) tr.pts.shift();
   }
   for (const q of projs) {
-    if (q.type === PROJ.SHELL || q.type === PROJ.BULLET) continue;
+    if (q.type === PROJ.SHELL || q.type === PROJ.BULLET || q.type === PROJ.TORP || q.type === PROJ.BOMB) continue;
     let tr = trails.get(q.id);
     if (!tr) trails.set(q.id, (tr = { pts: [], big: q.type === PROJ.EXOCET || q.type === PROJ.ARM }));
     tr.alive = true;
@@ -372,7 +396,7 @@ export function drawProjectiles(ctx, projs, t, zoom) {
   const boost = Math.max(1, 2.2 / zoom);
   // Schatten auf dem Wasser (nur Flugkörper in der Höhe)
   for (const q of projs) {
-    if (!q.z || q.z < 15 || q.type === PROJ.SHELL || q.type === PROJ.BULLET) continue;
+    if (!q.z || q.z < 15 || q.type === PROJ.SHELL || q.type === PROJ.BULLET || q.type === PROJ.TORP) continue;
     const off = Math.min(90, 2 + Math.sqrt(q.z) * 1.6);
     ctx.save();
     ctx.translate(q.x + off * 0.55, q.y + off);
@@ -392,7 +416,49 @@ export function drawProjectiles(ctx, projs, t, zoom) {
       const zs = 1 + Math.min(0.35, q.z / 6000);
       ctx.scale(zs, zs);
     }
-    if (q.type === PROJ.ROCKET) {
+    if (q.type === PROJ.TORP) {
+      // Torpedo unter Wasser: dunkler Schemen mit Blasenspur
+      const k = Math.min(0.75, 0.35 + -(q.z || 0) / 150);
+      ctx.fillStyle = `rgba(10,30,45,${0.75 - k * 0.4})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 3.4 * boost, 0.45 * boost, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(220,240,255,0.5)";
+      for (let i = 1; i <= 6; i++) {
+        const wob = Math.sin(t * 9 + i * 1.7 + q.id) * 0.8;
+        ctx.beginPath();
+        ctx.arc(-3 * boost - i * 3.2, wob, (0.5 + i * 0.12) * boost * (1 - i / 9), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (q.type === PROJ.BOMB) {
+      // Lenkbombe: olivgrüner Körper mit Leitwerk
+      const s2 = 1.2 * boost;
+      ctx.scale(s2, s2);
+      ctx.fillStyle = "#8a8e58";
+      ctx.fillRect(-1.6, -0.55, 0.4, 1.1);
+      ctx.fillStyle = "#6f7344";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 1.6, 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#c9a227";
+      ctx.fillRect(0.6, -0.16, 0.06, 0.32);
+    } else if (q.type === PROJ.AAM) {
+      // Luft-Luft-Flugkörper: schlank, heller Feuerstrahl
+      const s2 = 1.1 * boost;
+      ctx.scale(s2, s2);
+      ctx.fillStyle = "rgba(255,220,140,0.9)";
+      ctx.beginPath();
+      ctx.moveTo(-1.8, -0.12);
+      ctx.lineTo(-4.5 - Math.random(), 0);
+      ctx.lineTo(-1.8, 0.12);
+      ctx.fill();
+      ctx.fillStyle = "#eceee9";
+      ctx.fillRect(-1.8, -0.09, 3.4, 0.18);
+      ctx.fillStyle = "#6b706d";
+      ctx.fillRect(1.4, -0.09, 0.3, 0.18);
+      ctx.fillStyle = "#a9ada9";
+      ctx.fillRect(-1.7, -0.32, 0.3, 0.64);
+    } else if (q.type === PROJ.ROCKET) {
       ctx.fillStyle = "rgba(255,190,90,0.9)";
       ctx.fillRect(-4 * boost, -0.25 * boost, 2.4 * boost, 0.5 * boost);
       ctx.fillStyle = "#e6e6e0";

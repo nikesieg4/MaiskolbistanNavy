@@ -82,3 +82,46 @@ WEAPON_UI.jammer = {
   sub: "bereit (F)",
   icon: svg('<rect x="8" y="9" width="26" height="6" rx="3" fill="#c4c9c2"/><circle cx="32" cy="12" r="1.6" fill="#ff5a46"/><path d="M36 6 Q41 12 36 18" stroke="#ff8a6a" stroke-width="1.5" fill="none"/><path d="M40 3 Q47 12 40 21" stroke="#ff8a6a" stroke-width="1.2" fill="none" opacity=".6"/>'),
 };
+
+// Kampfflugzeuge: Bordkanonen, Luft-Luft, Luft-Boden
+const JG = {
+  sub: "starr nach vorn (F halten)",
+  icon: svg('<path d="M4 12 L14 9 L30 10 L30 14 L14 15 Z" fill="#9aa3a8"/><rect x="30" y="11" width="12" height="2" fill="#555"/><circle cx="44" cy="12" r="1.6" fill="#ffd75e"/><circle cx="47" cy="12" r="1" fill="#ffd75e" opacity=".6"/>'),
+};
+const AAM = (name, sub) => ({
+  name,
+  sub,
+  icon: svg('<rect x="6" y="10.5" width="32" height="3" rx="1.5" fill="#eef0ec"/><path d="M38 10.5 Q45 12 38 13.5 Z" fill="#6b706d"/><path d="M8 12 L4 7 L6 7 L11 12 L6 17 L4 17 Z" fill="#a9ada9"/><rect x="30" y="10.5" width="1.2" height="3" fill="#c9a227"/>'),
+});
+Object.assign(WEAPON_UI, {
+  gun27: { ...JG, name: "BK-27" },
+  m61: { ...JG, name: "M61 Vulcan" },
+  gau12: { ...JG, name: "GAU-12" },
+  gau22: { ...JG, name: "GAU-22" },
+  iris_t: AAM("IRIS-T", "Infrarot · Luftziel am Zeiger"),
+  aim9x: AAM("AIM-9X", "Infrarot · Luftziel am Zeiger"),
+  meteor: AAM("Meteor", "Radar · Lock (R) für große Reichweite"),
+  aim120: AAM("AIM-120", "Radar · Lock (R) für große Reichweite"),
+  taurus: { ...WEAPON_UI.exocet, name: "Taurus", sub: "Marschflugkörper → Lock/Zeiger" },
+  jsm: { ...WEAPON_UI.exocet, name: "JSM", sub: "Seeziel aus dem Waffenschacht" },
+  gbu12: {
+    name: "GBU-12",
+    sub: "Lenkbombe – aus der Höhe abwerfen",
+    icon: svg('<ellipse cx="22" cy="12" rx="15" ry="3.4" fill="#6f7344"/><rect x="6" y="6" width="3" height="12" fill="#8a8e58"/><rect x="31" y="9" width="3" height="6" fill="#9da19d"/><circle cx="38" cy="12" r="1.4" fill="#ccc"/><rect x="26" y="8.6" width="1.4" height="6.8" fill="#c9a227"/>'),
+  },
+  // Torpedos und U-Boot-Flugabwehr
+  dm2a4: {
+    name: "DM2A4",
+    sub: "Schwergewichtstorpedo → Lock/Zeiger",
+    icon: svg('<rect x="6" y="9" width="32" height="6" rx="3" fill="#3f4a4f"/><path d="M38 9 Q45 12 38 15 Z" fill="#2a3135"/><path d="M6 12 L2 7 L4 7 L8 12 L4 17 L2 17 Z" fill="#59656b"/><circle cx="10" cy="5" r="1.2" fill="#bfe6ff" opacity=".7"/><circle cx="5" cy="19" r="1" fill="#bfe6ff" opacity=".6"/>'),
+  },
+});
+WEAPON_UI.mk48 = { ...WEAPON_UI.dm2a4, name: "Mk 48" };
+WEAPON_UI.mu90 = { ...WEAPON_UI.dm2a4, name: "MU90", sub: "Leichttorpedo gegen U-Boote" };
+WEAPON_UI.mk54 = { ...WEAPON_UI.dm2a4, name: "Mk 54", sub: "Leichttorpedo gegen U-Boote" };
+WEAPON_UI.idas = { ...WEAPON_UI.ram, name: "IDAS", sub: "Flugabwehr – nur Sehrohrtiefe" };
+ABILITY_UI.decoy = {
+  name: "Täuscher",
+  title: "Torpedotäuschkörper: lenkt anlaufende Torpedos mit 70 % Wahrscheinlichkeit ab",
+  icon: svg('<circle cx="10" cy="12" r="4" fill="#bfe6ff" opacity=".8"/><circle cx="18" cy="7" r="2.5" fill="#bfe6ff" opacity=".6"/><circle cx="20" cy="16" r="3" fill="#bfe6ff" opacity=".5"/><circle cx="28" cy="11" r="2" fill="#bfe6ff" opacity=".4"/>'),
+};

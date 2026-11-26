@@ -7,7 +7,9 @@ export const WORLD_SIZE = 10000;
 export const MAP_SEED = 48143;
 export const MAX_NAME = 16;
 
-// Fahrzeugtypen. kind: "ship" (fährt), "heli" (schwebt) oder "drone" (fliegt, Mindestgeschwindigkeit).
+// Fahrzeugtypen. kind: "ship" (fährt), "sub" (taucht), "heli" (schwebt), "drone" (fliegt, Mindestgeschwindigkeit)
+// oder "jet" (Kampfflugzeug mit Treibstoff und Nachbrenner; vtol = Senkrechtstarter).
+// rank: nötiger Dienstgrad zum Kauf (siehe RANKS).
 // team: 0 = Maiskolbistan (deutsch/europäisch), 1 = Paprikistan (amerikanisch).
 // weapons: Reihenfolge = Tasten 1, 2, 3 …; ability: Fähigkeit auf Taste E.
 // sensor: Erfassungsreichweite (m), sig: Signatur (wie gut man selbst entdeckt wird).
@@ -43,12 +45,12 @@ export const BOATS = {
       { x: -15, y: 2.6, a: 0.5 },
     ],
     mags: { ram: 42 },
-    hp: 180, sensor: 2600, sig: 0.9,
+    hp: 180, sensor: 2600, sig: 0.9, sonar: 1200, rank: 3,
   },
   f124: {
     typeId: 4, team: 0, kind: "ship", level: 3, price: 12000,
     label: "Fregatte Sachsen (F124)", short: "Fregatte Sachsen",
-    weapons: ["gun76", "harpoon", "sm2", "ram"], ability: "radar",
+    weapons: ["gun76", "harpoon", "sm2", "ram", "mu90"], ability: "radar",
     // ein Landedeck am Heck = ein Hubschrauber
     heliType: "nh90", heliSpots: [{ x: -61.5, y: 0 }],
     length: 143, beam: 17.4, maxSpeed: 14.9, maxReverse: 0.3, accel: 1.1, decel: 1.6, turnRate: 0.14,
@@ -59,7 +61,7 @@ export const BOATS = {
       { x: 2, y: -3.2, a: -0.55 }, { x: 0, y: -3.2, a: -0.55 }, { x: -2, y: -3.2, a: -0.55 }, { x: -4, y: -3.2, a: -0.55 },
       { x: 2, y: 3.2, a: 0.55 }, { x: 0, y: 3.2, a: 0.55 }, { x: -2, y: 3.2, a: 0.55 }, { x: -4, y: 3.2, a: 0.55 },
     ],
-    hp: 320, sensor: 3200, sig: 1.0,
+    hp: 320, sensor: 3200, sig: 1.0, sonar: 2600, rank: 7,
   },
   carrier: {
     typeId: 1, team: 0, kind: "ship", level: 2, price: 6000,
@@ -68,16 +70,16 @@ export const BOATS = {
     length: 182, beam: 30, maxSpeed: 10.3, maxReverse: 0.25, accel: 0.7, decel: 1.0, turnRate: 0.085,
     ram: { x: -84, arc: 150 * DEG, speed: 1.6 },
     mags: { ram: 42 },
-    hp: 400, sensor: 2800, sig: 1.3,
+    hp: 400, sensor: 2800, sig: 1.3, rank: 5,
     heliSpots: [64, 38, 12, -14, -40, -66].map((x) => ({ x, y: -4 })),
   },
   nh90: {
     typeId: 5, team: 0, kind: "heli", level: 2, price: 0,
     label: "NH90 NFH", short: "NH90",
     weapons: ["mg", "marte"], ability: "flares",
-    slots: { 1: ["marte", "stinger_aa", "rkt70"] },
+    slots: { 1: ["marte", "stinger_aa", "rkt70", "mu90"] },
     length: 19.6, beam: 16.3, maxSpeed: 74, maxReverse: 0.35, accel: 16, decel: 22, turnRate: 1.45,
-    hitRadius: 8, hp: 45, sensor: 1600, sig: 0.6,
+    hitRadius: 8, hp: 45, sensor: 1600, sig: 0.6, sonar: 2400, dipping: true,
     alt: { min: 15, max: 1500, cruise: 120, climb: 14 },
   },
   heron: {
@@ -115,12 +117,12 @@ export const BOATS = {
       { x: 30, y: -5, a: -0.6 }, { x: 28, y: -5, a: -0.6 }, { x: 26, y: -5, a: -0.6 }, { x: 24, y: -5, a: -0.6 },
       { x: 30, y: 5, a: 0.6 }, { x: 28, y: 5, a: 0.6 }, { x: 26, y: 5, a: 0.6 }, { x: 24, y: 5, a: 0.6 },
     ],
-    hp: 200, sensor: 2600, sig: 0.95,
+    hp: 200, sensor: 2600, sig: 0.95, sonar: 1600, rank: 3,
   },
   burke: {
     typeId: 9, team: 1, kind: "ship", level: 3, price: 12000,
     label: "Zerstörer Arleigh Burke (DDG-51)", short: "Zerstörer Arleigh Burke",
-    weapons: ["gun127", "harpoon", "sm2"], ability: "radar",
+    weapons: ["gun127", "harpoon", "sm2", "mk54"], ability: "radar",
     heliType: "blackhawk", heliSpots: [{ x: -69.5, y: 0 }],
     length: 155, beam: 20, maxSpeed: 15.4, maxReverse: 0.3, accel: 1.1, decel: 1.6, turnRate: 0.13,
     gun: { x: 58, arc: 150 * DEG, speed: 1.2 },
@@ -130,7 +132,7 @@ export const BOATS = {
       { x: -38, y: 3.4, a: 0.6 }, { x: -40, y: 3.4, a: 0.6 }, { x: -42, y: 3.4, a: 0.6 }, { x: -44, y: 3.4, a: 0.6 },
     ],
     mags: { sm2: 40 },
-    hp: 340, sensor: 3200, sig: 1.0,
+    hp: 340, sensor: 3200, sig: 1.0, sonar: 2800, rank: 7,
   },
   america: {
     typeId: 10, team: 1, kind: "ship", level: 2, price: 6000,
@@ -139,16 +141,16 @@ export const BOATS = {
     length: 257, beam: 36, maxSpeed: 11.3, maxReverse: 0.25, accel: 0.6, decel: 0.9, turnRate: 0.07,
     ram: { x: -118, arc: 150 * DEG, speed: 1.6 },
     mags: { searam: 22 },
-    hp: 450, sensor: 2800, sig: 1.4,
+    hp: 450, sensor: 2800, sig: 1.4, rank: 5,
     heliSpots: [64, 38, 12, -14, -40, -66].map((x) => ({ x: x * 1.4, y: -4.8 })),
   },
   blackhawk: {
     typeId: 2, team: 1, kind: "heli", level: 2, price: 0,
     label: "UH-60 Black Hawk", short: "Black Hawk",
     weapons: ["mg", "hellfire"], ability: "flares",
-    slots: { 1: ["hellfire", "stinger_aa", "rkt70"] },
+    slots: { 1: ["hellfire", "stinger_aa", "rkt70", "mk54"] },
     length: 19.8, beam: 16.4, maxSpeed: 72, maxReverse: 0.35, accel: 16, decel: 22, turnRate: 1.5,
-    hitRadius: 8, hp: 40, sensor: 1600, sig: 0.6,
+    hitRadius: 8, hp: 40, sensor: 1600, sig: 0.6, sonar: 2400, dipping: true,
     alt: { min: 15, max: 1500, cruise: 120, climb: 14 },
   },
   reaper: {
@@ -160,12 +162,79 @@ export const BOATS = {
     hitRadius: 8, hp: 25, sensor: 3300, sig: 0.45,
     alt: { min: 150, max: 6000, cruise: 1800, climb: 12 },
   },
+
+  // ---------------- Kampfflugzeuge ----------------
+  // Landjäger starten von der Bahn, Senkrechtstarter (vtol) auch vom Trägerdeck.
+  eurofighter: {
+    typeId: 12, team: 0, kind: "jet", level: 3, price: 12000, rank: 9,
+    label: "Eurofighter Typhoon", short: "Eurofighter",
+    weapons: ["gun27", "iris_t", "meteor"], ability: "flares",
+    slots: { 2: ["meteor", "taurus", "gbu12"] },
+    length: 15.96, beam: 10.95, maxSpeed: 230, abSpeed: 310, minSpeed: 75, landSpeed: 95, maxReverse: 0,
+    accel: 24, decel: 18, turnRate: 0.62,
+    hitRadius: 9, hp: 60, sensor: 5500, sig: 0.9, fuel: 240,
+    alt: { min: 40, max: 12000, cruise: 2500, climb: 70 },
+  },
+  harrier: {
+    typeId: 13, team: 0, kind: "jet", level: 2, price: 8000, rank: 6, vtol: true,
+    label: "AV-8B Harrier II", short: "Harrier II",
+    weapons: ["gau12", "aim9x", "gbu12"], ability: "flares",
+    slots: { 2: ["gbu12", "aim120", "marte"] },
+    length: 14.12, beam: 9.25, maxSpeed: 190, minSpeed: 0, landSpeed: 95, maxReverse: 0,
+    accel: 18, decel: 16, turnRate: 0.6,
+    hitRadius: 8, hp: 50, sensor: 3800, sig: 0.8, fuel: 200,
+    alt: { min: 15, max: 10000, cruise: 1500, climb: 55 },
+  },
+  f16: {
+    typeId: 14, team: 1, kind: "jet", level: 2, price: 8000, rank: 6,
+    label: "F-16C Fighting Falcon", short: "F-16C",
+    weapons: ["m61", "aim9x", "aim120"], ability: "flares",
+    slots: { 2: ["aim120", "harm", "gbu12"] },
+    length: 15.06, beam: 9.96, maxSpeed: 225, abSpeed: 300, minSpeed: 72, landSpeed: 95, maxReverse: 0,
+    accel: 24, decel: 18, turnRate: 0.66,
+    hitRadius: 8, hp: 55, sensor: 5000, sig: 0.85, fuel: 220,
+    alt: { min: 40, max: 12000, cruise: 2500, climb: 75 },
+  },
+  f35: {
+    typeId: 15, team: 1, kind: "jet", level: 3, price: 12000, rank: 9, vtol: true,
+    label: "F-35B Lightning II", short: "F-35B",
+    weapons: ["gau22", "aim120", "gbu12"], ability: "flares",
+    slots: { 2: ["gbu12", "jsm"] },
+    length: 15.6, beam: 10.7, maxSpeed: 210, abSpeed: 280, minSpeed: 0, landSpeed: 95, maxReverse: 0,
+    accel: 20, decel: 16, turnRate: 0.58,
+    hitRadius: 9, hp: 60, sensor: 6000, sig: 0.3, fuel: 230, // Tarnkappe: Waffen im Rumpfschacht
+    alt: { min: 15, max: 12000, cruise: 2500, climb: 65 },
+  },
+  // ---------------- U-Boote ----------------
+  // depth: tiefste Tauchtiefe (negativ), Sehrohrtiefe = −15 m. noise: Eigengeräusch für gegnerisches Sonar.
+  u212: {
+    typeId: 16, team: 0, kind: "sub", level: 2, price: 7000, rank: 5,
+    label: "U-Boot Klasse 212A", short: "U 212A",
+    weapons: ["dm2a4", "idas"], ability: "decoy",
+    length: 56, beam: 7, maxSpeed: 10.3, maxReverse: 0.25, accel: 0.9, decel: 1.3, turnRate: 0.2,
+    hp: 140, sensor: 2400, sonar: 4200, sig: 0.55, noise: 0.5,
+    depth: { min: -300, cruise: -15, rate: 5 },
+  },
+  virginia: {
+    typeId: 17, team: 1, kind: "sub", level: 3, price: 9000, rank: 6,
+    label: "U-Boot Virginia-Klasse (SSN-774)", short: "Virginia",
+    weapons: ["mk48", "harpoon"], ability: "decoy",
+    length: 115, beam: 10.4, maxSpeed: 12.9, maxReverse: 0.25, accel: 0.8, decel: 1.2, turnRate: 0.15,
+    ssm: [{ x: 34, y: -1.4, a: 0 }, { x: 34, y: 1.4, a: 0 }, { x: 31, y: -1.4, a: 0 }, { x: 31, y: 1.4, a: 0 }],
+    hp: 220, sensor: 2600, sonar: 4800, sig: 0.7, noise: 0.6,
+    depth: { min: -400, cruise: -15, rate: 5 },
+  },
 };
 export const TYPE_BY_ID = [];
 for (const [k, d] of Object.entries(BOATS)) TYPE_BY_ID[d.typeId] = k;
 export const START_SHIP = ["gepard", "cyclone"];
 export const DRONE_OF = ["heron", "reaper"];
-export const isAir = (def) => def.kind === "heli" || def.kind === "drone";
+export const isAir = (def) => def.kind === "heli" || def.kind === "drone" || def.kind === "jet";
+export const isSub = (def) => def.kind === "sub";
+// Kaufbare Fahrzeuge (Laden): Schiffe, U-Boote, Kampfflugzeuge
+export const isBuyable = (def) => def.kind === "ship" || def.kind === "sub" || def.kind === "jet";
+// Tiefenstufen der U-Boote
+export const DEPTH = { surface: -5, periscope: -25 };
 // Hangar: Optionen für einen Waffenplatz eines Luftfahrzeugs
 export function slotOptions(def, i) {
   return (def.slots && def.slots[i]) || null;
@@ -177,6 +246,7 @@ export const ECONOMY = {
   bounty(def) {
     if (def.kind === "drone") return 400;
     if (def.kind === "heli") return 600;
+    if (def.kind === "jet") return 900 + def.level * 300;
     if (def.carrier) return 3000;
     return [0, 1000, 1800, 3000][def.level] || 1000;
   },
@@ -233,6 +303,51 @@ export const WEAPONS = {
   },
   // Radarstörpod für Drohnen: stört gegnerische Sensoren, Locks und Lenkwaffen in der Nähe – sendet dabei selbst
   jammer: { kind: "jam", label: "Radarstörpod", duration: 8, reload: 20, radius: 2600, lockRadius: 1400, sensorFactor: 0.45, breakChance: 0.05 },
+  // Bordkanonen der Kampfflugzeuge: feuern starr in Flugrichtung
+  gun27: { kind: "jgun", label: "27 mm Mauser BK-27", auto: true, reload: 0.07, speed: 950, range: 1500, damage: 1, airDamage: 3, spread: 0.01, ceiling: 200 },
+  m61: { kind: "jgun", label: "20 mm M61 Vulcan", auto: true, reload: 0.05, speed: 950, range: 1400, damage: 0.8, airDamage: 2.4, spread: 0.012, ceiling: 200 },
+  gau12: { kind: "jgun", label: "25 mm GAU-12 (Behälter)", auto: true, reload: 0.06, speed: 900, range: 1400, damage: 1.1, airDamage: 2.6, spread: 0.014, ceiling: 200 },
+  gau22: { kind: "jgun", label: "25 mm GAU-22/A", auto: true, reload: 0.06, speed: 900, range: 1400, damage: 1.1, airDamage: 2.6, spread: 0.012, ceiling: 200 },
+  // Luft-Luft-Flugkörper. ir = Infrarot (Täuschkörper wirken stark), sonst Radar (braucht Lock für große Reichweite)
+  iris_t: {
+    kind: "aam", ir: true, label: "IRIS-T", count: 2, reload: 40, interval: 0.6, speed: 650, turn: 3.0, range: 2600, damage: 30,
+    seekerRange: 2200, seekerCone: 0.9, rails: [{ x: -4.9, y: -5.6 }, { x: -4.9, y: 5.6 }],
+  },
+  aim9x: {
+    kind: "aam", ir: true, label: "AIM-9X Sidewinder", count: 2, reload: 40, interval: 0.6, speed: 640, turn: 3.0, range: 2500, damage: 30,
+    seekerRange: 2100, seekerCone: 0.9, rails: [{ x: -2.4, y: -4.9 }, { x: -2.4, y: 4.9 }],
+  },
+  meteor: {
+    kind: "aam", label: "Meteor", count: 2, reload: 50, interval: 0.8, speed: 720, turn: 2.0, range: 6500, damage: 40,
+    seekerRange: 2600, seekerCone: 0.7, rails: [{ x: -2.3, y: -3.2 }, { x: -2.3, y: 3.2 }],
+  },
+  aim120: {
+    kind: "aam", label: "AIM-120 AMRAAM", count: 2, reload: 50, interval: 0.8, speed: 680, turn: 2.1, range: 5500, damage: 40,
+    seekerRange: 2400, seekerCone: 0.7, rails: [{ x: -1.8, y: -3.2 }, { x: -1.8, y: 3.2 }],
+  },
+  // Luft-Boden: Marschflugkörper und Lenkbomben
+  taurus: {
+    kind: "agm", label: "Taurus KEPD 350", count: 2, reload: 60, interval: 1, speed: 250, turn: 1.0, range: 7500, damage: 45,
+    seekerRange: 1500, seekerCone: 0.6, rails: [{ x: -2.6, y: -3.2 }, { x: -2.6, y: 3.2 }],
+  },
+  jsm: {
+    kind: "agm", label: "Joint Strike Missile", count: 2, reload: 60, interval: 1, speed: 260, turn: 1.2, range: 6500, damage: 42,
+    seekerRange: 1500, seekerCone: 0.7, rails: [{ x: -1.5, y: -0.8 }, { x: -1.5, y: 0.8 }],
+  },
+  gbu12: {
+    kind: "bomb", label: "GBU-12 Paveway II", count: 2, reload: 50, interval: 0.6, speed: 0, turn: 0.5, range: 9000, damage: 50,
+    radius: 30, rails: [{ x: -1.9, y: -3.2 }, { x: -1.9, y: 3.2 }],
+  },
+  // Torpedos: schwer (U-Boote) und leicht (Fregatten, Bordhubschrauber). Treffen Schiffe und getauchte U-Boote.
+  dm2a4: { kind: "torp", label: "DM2A4 Seehecht", count: 4, reload: 25, interval: 2, speed: 30, turn: 0.45, range: 6500, damage: 60, seekerRange: 1100, seekerCone: 0.7 },
+  mk48: { kind: "torp", label: "Mk 48 ADCAP", count: 4, reload: 25, interval: 2, speed: 31, turn: 0.42, range: 7000, damage: 70, seekerRange: 1100, seekerCone: 0.7 },
+  mu90: { kind: "torp", label: "MU90 Leichttorpedo", count: 2, reload: 35, interval: 1.5, speed: 27, turn: 0.6, range: 3500, damage: 35, seekerRange: 850, seekerCone: 0.8 },
+  mk54: { kind: "torp", label: "Mk 54 Leichttorpedo", count: 2, reload: 35, interval: 1.5, speed: 27, turn: 0.6, range: 3500, damage: 35, seekerRange: 850, seekerCone: 0.8 },
+  // Flugabwehr aus dem getauchten U-Boot (nur auf Sehrohrtiefe): jagt nur Luftfahrzeuge
+  idas: {
+    ceiling: 2500, kind: "sam", airOnly: true, label: "IDAS", magazine: 4, reload: 30, interval: 1, speed: 240, turn: 3, range: 2200, damage: 6,
+    seekerRange: 1800, pk: 0.7, rails: [{ x: 8, y: 0 }],
+  },
   lock: {
     range: 3000, // Lock-Reichweite (Ziel muss vom Team erfasst sein)
     breakRange: 5500,
@@ -258,10 +373,16 @@ export const ABILITIES = {
     duration: 3,
     cooldown: 18,
   },
+  decoy: {
+    label: "Torpedotäuschkörper",
+    duration: 6,
+    cooldown: 30,
+    breakChance: 0.7,
+  },
 };
 
-export const PROJ = { SHELL: 1, EXOCET: 2, RAM: 3, BULLET: 4, HELLFIRE: 5, ARM: 6, ROCKET: 7 };
-export const PROJ_OF_KIND = { gun: 1, ssm: 2, sam: 3, mg: 4, agm: 5, arm: 6, rkt: 7 };
+export const PROJ = { SHELL: 1, EXOCET: 2, RAM: 3, BULLET: 4, HELLFIRE: 5, ARM: 6, ROCKET: 7, AAM: 8, BOMB: 9, TORP: 10 };
+export const PROJ_OF_KIND = { gun: 1, ssm: 2, sam: 3, mg: 4, agm: 5, arm: 6, rkt: 7, jgun: 4, aam: 8, bomb: 9, torp: 10 };
 // Flugkörper, die von Flugabwehr (sam) abgefangen werden können
 export const INTERCEPTABLE = new Set([2, 5, 6]);
 
@@ -288,17 +409,135 @@ export const SENSORS = {
   ghost: 12, // s: zuletzt gesehene Kontakte
 };
 
-// Erfassungsreichweite einer Einheit (Luftfahrzeuge: weiter, je höher sie fliegen – Radarhorizont)
-export function sensorRange(def, radarOn, abilityRadar, z = 0) {
+// Wetterfaktoren: vis = Sicht, radar, sonar, sea = Fahrtminderung durch Seegang (1 = keine)
+const ENV_NEUTRAL = { vis: 1, radar: 1, sonar: 1, sea: 1, rain: 0, fog: 0, cloud: 0, night: 0 };
+
+// Erfassungsreichweite (Radar/Sicht) einer Einheit. Luftfahrzeuge: weiter, je höher sie fliegen (Radarhorizont).
+// U-Boote sehen nur aufgetaucht oder auf Sehrohrtiefe etwas (sonst nur Sonar).
+export function sensorRange(def, radarOn, abilityRadar, z = 0, env = ENV_NEUTRAL) {
   let r = def.sensor;
+  if (def.kind === "sub") {
+    if (z < DEPTH.periscope) return 0;
+    return r * (z < DEPTH.surface ? 0.8 : 1) * env.vis;
+  }
   if (def.alt) r *= 0.55 + 0.45 * Math.min(1, Math.sqrt(Math.max(0, z) / (def.alt.max * 0.5)));
-  if (abilityRadar) return Math.max(SENSORS.radarAbility, r);
-  if (def.kind === "ship" && !radarOn) return r * SENSORS.radarOffFactor;
-  return r;
+  if (abilityRadar) return Math.max(SENSORS.radarAbility * env.radar, r);
+  if (def.kind === "ship") return radarOn ? r * env.radar : r * SENSORS.radarOffFactor * env.vis;
+  if (def.kind === "jet") return r * env.radar;
+  return r * (0.6 * env.radar + 0.4 * env.vis);
+}
+// Sonarreichweite: Rumpfsonar (Schiffe), Passivsonar (U-Boote), Tauchsonar (Hubschrauber nur im Schwebeflug tief)
+export function sonarRange(def, b, env = ENV_NEUTRAL) {
+  if (!def.sonar) return 0;
+  if (def.dipping) return (b.z || 0) <= ALTITUDE.lowFly && Math.abs(b.v) < 10 ? def.sonar * env.sonar : 0;
+  const flow = 1 - 0.5 * Math.min(1, Math.abs(b.v) / def.maxSpeed); // Strömungsgeräusch bei hoher Fahrt
+  return def.sonar * flow * env.sonar;
+}
+// Wie laut ist ein Fahrzeug unter Wasser? (Schiffe laut, U-Boote leise, schnell = lauter)
+export function noiseLevel(def, b) {
+  const v = Math.min(1, Math.abs(b.v) / def.maxSpeed);
+  if (def.kind === "sub") return def.noise * (0.3 + 1.1 * v) * ((b.z || 0) > DEPTH.surface ? 2 : 1);
+  return (def.noise || 1.1) * (0.5 + 0.5 * v);
 }
 export function signature(def, radarOn, z = 0) {
+  if (def.kind === "sub") return def.sig * (z < DEPTH.surface ? 0.3 : 1); // Sehrohr/Mast
   if (def.kind !== "ship") return def.sig * (z < ALTITUDE.lowFly ? ALTITUDE.lowSig : 1);
   return def.sig * (radarOn ? SENSORS.emitterBonus : SENSORS.radarOffSig);
+}
+
+// ---------- Tageszeit und Wetter ----------
+// 1 Spielstunde = 1 Minute (ein Tag = 24 Minuten), Wetter wechselt alle 8 Minuten mit 1 Minute Übergang.
+export const WEATHER = [
+  { key: "klar", label: "Klar", vis: 1, radar: 1, sonar: 1, sea: 1, rain: 0, fog: 0, cloud: 0.1, weight: 35 },
+  { key: "wolkig", label: "Bewölkt", vis: 0.9, radar: 1, sonar: 1, sea: 1, rain: 0, fog: 0, cloud: 0.6, weight: 25 },
+  { key: "regen", label: "Regen", vis: 0.7, radar: 0.85, sonar: 0.9, sea: 0.95, rain: 0.55, fog: 0.15, cloud: 0.85, weight: 18 },
+  { key: "nebel", label: "Nebel", vis: 0.45, radar: 0.95, sonar: 1, sea: 1, rain: 0, fog: 0.8, cloud: 0.4, weight: 12 },
+  { key: "sturm", label: "Sturm", vis: 0.6, radar: 0.75, sonar: 0.7, sea: 0.8, rain: 1, fog: 0.25, cloud: 1, weight: 10 },
+];
+export const WEATHER_SLOT = 8 * 60000;
+const WEATHER_FADE = 60000;
+function weatherOfSlot(slot) {
+  const r = mulberry32(slot * 7919 + 13)();
+  const total = WEATHER.reduce((a, w) => a + w.weight, 0);
+  let acc = 0;
+  for (let i = 0; i < WEATHER.length; i++) {
+    acc += WEATHER[i].weight / total;
+    if (r < acc) return i;
+  }
+  return 0;
+}
+// Zustand zur Zeit now: h = Stunde (0–24), w = Wetter, p = vorheriges Wetter, k = Übergang 0..1
+export function envAt(now) {
+  const h = (now / 60000) % 24;
+  const slot = Math.floor(now / WEATHER_SLOT);
+  const k = Math.min(1, (now - slot * WEATHER_SLOT) / WEATHER_FADE);
+  return { h, w: weatherOfSlot(slot), p: weatherOfSlot(slot - 1), k };
+}
+// Tageslicht 0 (Nacht) … 1 (Tag): Dämmerung 5–7 Uhr und 19–21 Uhr
+export function dayLight(h) {
+  if (h >= 7 && h <= 19) return 1;
+  if (h <= 5 || h >= 21) return 0;
+  const t = h < 12 ? (h - 5) / 2 : (21 - h) / 2;
+  return t * t * (3 - 2 * t);
+}
+export function envFactors(env) {
+  if (!env) return ENV_NEUTRAL;
+  const a = WEATHER[env.p];
+  const b = WEATHER[env.w];
+  const mix = (key) => a[key] + (b[key] - a[key]) * env.k;
+  const night = 1 - dayLight(env.h);
+  return {
+    vis: mix("vis") * (1 - 0.45 * night),
+    radar: mix("radar"),
+    sonar: mix("sonar"),
+    sea: mix("sea"),
+    rain: mix("rain"),
+    fog: mix("fog"),
+    cloud: mix("cloud"),
+    night,
+  };
+}
+
+// ---------- Dienstgrade (Erfahrungspunkte) ----------
+export const RANKS = [
+  { name: "Matrose", short: "Mt", xp: 0 },
+  { name: "Gefreiter", short: "Gefr", xp: 100 },
+  { name: "Obergefreiter", short: "OGefr", xp: 300 },
+  { name: "Maat", short: "Maat", xp: 700 },
+  { name: "Obermaat", short: "OMt", xp: 1300 },
+  { name: "Bootsmann", short: "Btsm", xp: 2200 },
+  { name: "Oberbootsmann", short: "OBtsm", xp: 3500 },
+  { name: "Leutnant zur See", short: "Lt", xp: 5500 },
+  { name: "Oberleutnant zur See", short: "OLt", xp: 8000 },
+  { name: "Kapitänleutnant", short: "KptLt", xp: 11500 },
+  { name: "Korvettenkapitän", short: "KKpt", xp: 16000 },
+  { name: "Fregattenkapitän", short: "FKpt", xp: 22000 },
+  { name: "Kapitän zur See", short: "KzS", xp: 30000 },
+  { name: "Flottillenadmiral", short: "FltlAdm", xp: 40000 },
+  { name: "Konteradmiral", short: "KAdm", xp: 55000 },
+  { name: "Vizeadmiral", short: "VAdm", xp: 75000 },
+  { name: "Admiral", short: "Adm", xp: 100000 },
+];
+export function rankOf(xp) {
+  let r = 0;
+  for (let i = 0; i < RANKS.length; i++) if ((xp || 0) >= RANKS[i].xp) r = i;
+  return r;
+}
+export const XP_PER_TALER = 0.1; // Erfahrung = ein Zehntel der verdienten Taler (nur aus dem Gefecht)
+
+// ---------- Saisons der Frontkarte ----------
+// Jede Saison dauert eine Woche (Montag 0 Uhr UTC). Das Team mit mehr Stützpunkten am Ende gewinnt.
+export const SEASON = {
+  epoch: Date.UTC(2026, 10, 23), // Montag, 23.11.2026
+  length: 7 * 24 * 3600 * 1000,
+  medalBonus: 5000, // Taler für Sieger mit Beitrag
+  minPoints: 20, // nötiger Beitrag (Erfahrung in dieser Saison für das Siegerteam)
+};
+export function seasonOf(now) {
+  return Math.max(1, Math.floor((now - SEASON.epoch) / SEASON.length) + 1);
+}
+export function seasonEnd(id) {
+  return SEASON.epoch + id * SEASON.length;
 }
 
 // ---------- Frontkarte: Stützpunkte ----------
@@ -672,12 +911,19 @@ export function findSpawn(map, rnd = Math.random) {
 // Boot-Zustand: { x, y, h, v, w }  (Position, Kurs, Fahrt, Drehrate)
 // Eingabe: { th: -1..1 Fahrstufe, ru: -1..1 Ruder }
 
-// Hubschrauber: schwebt, dreht auch im Stand, ignoriert Land
+// Hubschrauber: schwebt, dreht auch im Stand, ignoriert Land. Drohnen und Jets: Mindestgeschwindigkeit.
+// Jets: Nachbrenner (input.ab, nur bei Vollschub), ohne Treibstoff (b.fuel ≤ 0) Gleitflug bis zum Absturz.
 export function stepHeli(b, input, def) {
   const th = clamp(+input.th || 0, -def.maxReverse, 1);
   const ru = clamp(+input.ru || 0, -1, 1);
+  const noFuel = def.fuel && b.fuel !== undefined && b.fuel <= 0;
   // Drohnen fliegen wie Flugzeuge: nie langsamer als minSpeed
-  const target = def.minSpeed ? def.minSpeed + Math.max(0, th) * (def.maxSpeed - def.minSpeed) : th * def.maxSpeed;
+  let target = def.minSpeed ? def.minSpeed + Math.max(0, th) * (def.maxSpeed - def.minSpeed) : th * def.maxSpeed;
+  if (def.kind === "jet") {
+    target = def.minSpeed + Math.max(0, th) * (def.maxSpeed - def.minSpeed);
+    if (input.ab && def.abSpeed && th > 0.9) target = def.abSpeed;
+    if (noFuel) target = Math.max(def.vtol ? 0 : 60, b.v - 6);
+  }
   const dv = target - b.v;
   const a = Math.abs(target) > Math.abs(b.v) ? def.accel : def.decel;
   b.v += clamp(dv, -a * DT, a * DT);
@@ -688,6 +934,7 @@ export function stepHeli(b, input, def) {
     if (b.zt === undefined) b.zt = A.cruise;
     if (b.z === undefined) b.z = A.cruise;
     b.zt = clamp(b.zt + clamp(+input.up || 0, -1, 1) * A.climb * 1.6 * DT, A.min, A.max);
+    if (noFuel) b.zt = 0; // Triebwerk aus: sinkt bis aufs Wasser
     b.z += clamp(b.zt - b.z, -A.climb * DT, A.climb * DT);
   }
   b.h = wrapAngle(b.h + b.w * DT);
@@ -701,16 +948,33 @@ export function stepHeli(b, input, def) {
   }
 }
 
-export function stepEntity(b, input, def, map) {
-  if (def.kind === "heli" || def.kind === "drone") stepHeli(b, input, def);
-  else stepBoat(b, input, def, map);
+// env: { sea } Fahrtminderung durch Seegang (kleine Boote leiden stärker)
+export function stepEntity(b, input, def, map, env) {
+  if (isAir(def)) stepHeli(b, input, def);
+  else {
+    stepBoat(b, input, def, map, env);
+    if (def.depth) {
+      // U-Boot: Q = auftauchen (flacher), C = tiefer
+      const D = def.depth;
+      if (b.zt === undefined) b.zt = 0;
+      if (b.z === undefined) b.z = 0;
+      b.zt = clamp(b.zt + clamp(+input.up || 0, -1, 1) * D.rate * 1.6 * DT, D.min, 0);
+      b.z += clamp(b.zt - b.z, -D.rate * DT, D.rate * DT);
+    }
+  }
 }
 
-export function stepBoat(b, input, def, map) {
+export function seaFactor(def, env) {
+  if (!env || env.sea >= 1 || isAir(def)) return 1;
+  return def.length < 70 ? Math.pow(env.sea, 1.5) : env.sea;
+}
+
+export function stepBoat(b, input, def, map, env) {
   const th = clamp(+input.th || 0, -def.maxReverse, 1);
   const ru = clamp(+input.ru || 0, -1, 1);
-
-  const target = th * def.maxSpeed;
+  // Getauchte U-Boote spüren den Seegang nicht
+  const sea = def.kind === "sub" && (b.z || 0) < DEPTH.periscope ? 1 : seaFactor(def, env);
+  const target = th * def.maxSpeed * sea;
   const dv = target - b.v;
   const a = Math.abs(target) > Math.abs(b.v) && Math.sign(target) !== -Math.sign(b.v) ? def.accel : def.decel;
   b.v += clamp(dv, -a * DT, a * DT);

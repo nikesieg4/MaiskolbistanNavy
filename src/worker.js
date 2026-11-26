@@ -44,6 +44,19 @@ import {
   apronSpot,
   slotOptions,
   ALTITUDE,
+  isSub,
+  isBuyable,
+  DEPTH,
+  sonarRange,
+  noiseLevel,
+  envAt,
+  envFactors,
+  RANKS,
+  rankOf,
+  XP_PER_TALER,
+  SEASON,
+  seasonOf,
+  seasonEnd,
 } from "../public/shared/sim.js";
 import ASSETS from "./assets.gen.js";
 
@@ -53,8 +66,40 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 11;
+const WORLD_VERSION = 12;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
+
+// ---------- Konten: Anmeldung ----------
+// Passwörter werden nur als PBKDF2-SHA-256-Hash (100.000 Runden, zufälliges Salz je Konto) gespeichert.
+// Angemeldet wird mit einem zufälligen Sitzungsschlüssel (256 Bit), den nur der Server erzeugt.
+// Speicher (Instanz "konten"): a:<id> Kontodaten, u:<name klein> Zugang, s:<schlüssel> Sitzung.
+// Gäste: id = zufälliger Schlüssel aus dem Browser (wie bisher); nach der Registrierung ist er wertlos.
+const NAME_RE = /^[A-Za-z0-9ÄÖÜäöüß_-]{3,16}$/;
+const PW_MIN = 8;
+const PW_MAX = 128;
+const PBKDF2_ITER = 100000;
+const SESSION_LIFE = 180 * 24 * 3600 * 1000;
+const AUTH_WINDOW = 15 * 60 * 1000;
+const AUTH_MAX_FAILS = 8;
+const enc = new TextEncoder();
+const toHex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+function randomHex(bytes) {
+  const a = new Uint8Array(bytes);
+  crypto.getRandomValues(a);
+  return toHex(a);
+}
+async function pbkdf2(password, saltHex, iter) {
+  const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const salt = Uint8Array.from(saltHex.match(/../g).map((h) => parseInt(h, 16)));
+  return toHex(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations: iter }, key, 256));
+}
+function safeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+const json = (obj, status = 200) => Response.json(obj, { status, headers: { "cache-control": "no-store" } });
 const RAFT_LIFE = 90; // s
 
 const worldStub = (env) => env.WORLD.get(env.WORLD.idFromName(`haupt-ozean-v${WORLD_VERSION}`));
@@ -73,6 +118,19 @@ export default {
       const q = TOKEN_RE.test(token) ? `?token=${token}` : "";
       return worldStub(env).fetch(new Request(`https://welt/status${q}`));
     }
+    // Konto-Schnittstelle (Anmelden, Registrieren, Abmelden, Kaufen im Menü)
+    if (url.pathname.startsWith("/api/")) {
+      if (request.method !== "POST") return json({ ok: false, m: "POST erwartet" }, 405);
+      const body = await request.text();
+      if (body.length > 2048) return json({ ok: false, m: "Anfrage zu groß" }, 413);
+      return worldStub(env).fetch(
+        new Request(`https://welt${url.pathname}`, {
+          method: "POST",
+          body,
+          headers: { "content-type": "application/json", "x-ip": request.headers.get("cf-connecting-ip") || "" },
+        })
+      );
+    }
     const path = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = Object.hasOwn(ASSETS, path) ? ASSETS[path] : null;
     const head = request.method === "HEAD";
@@ -90,7 +148,25 @@ export default {
   },
 };
 
-const defaultAccount = () => ({ money: 0, owned: [...START_SHIP] });
+const defaultAccount = () => ({ money: 0, owned: [...START_SHIP], loadout: {}, xp: 0, stats: {}, sp: null, medals: [] });
+// Felder, die die Spielwelt verwaltet (Rest wie reg/name gehört der Anmeldung)
+function cleanAccount(body) {
+  const stats = {};
+  if (body.stats && typeof body.stats === "object") for (const k of ["kills", "deaths", "caps", "rescues"]) stats[k] = Math.max(0, Math.floor(+body.stats[k] || 0));
+  const sp = body.sp && typeof body.sp === "object" && Number.isFinite(+body.sp.id) && Array.isArray(body.sp.pts) ? { id: +body.sp.id, pts: [Math.max(0, +body.sp.pts[0] || 0), Math.max(0, +body.sp.pts[1] || 0)] } : null;
+  const medals = (Array.isArray(body.medals) ? body.medals : []).filter((m) => m && Number.isFinite(+m.s)).slice(-100).map((m) => ({ s: +m.s, t: +m.t ? 1 : 0 }));
+  const acct = {
+    money: Math.max(0, Math.floor(+body.money || 0)),
+    owned: (Array.isArray(body.owned) ? body.owned : []).filter((t) => BOATS[t]),
+    loadout: body.loadout && typeof body.loadout === "object" ? body.loadout : {},
+    xp: Math.max(0, Math.floor(+body.xp || 0)),
+    stats,
+    sp,
+    medals,
+  };
+  for (const s of START_SHIP) if (!acct.owned.includes(s)) acct.owned.push(s);
+  return acct;
+}
 
 export class World {
   constructor(state, env) {
@@ -101,7 +177,12 @@ export class World {
     this.projectiles = [];
     this.rafts = []; // Schiffbrüchige: { id, x, y, t }
     this.events = []; // Effekte dieses Ticks: [typ, x, y, ...]
-    this.accounts = new Map(); // token -> { money, owned, dirty }
+    this.accounts = new Map(); // Konto-ID -> { id, money, owned, xp, …, dirty }
+    this.tokenIds = new Map(); // Schlüssel -> Konto-ID (Zwischenspeicher)
+    this.authFails = new Map(); // nur Instanz "konten": Fehlversuche je Name/IP
+    this.nameCache = new Map(); // registrierte Namen (für Gäste gesperrt)
+    this.wx = envAt(Date.now()); // Tageszeit und Wetter
+    this.wxF = envFactors(this.wx);
     this.front = null; // { own: [], prog: [] }
     this.frontDirty = false;
     this.det = [new Set(), new Set()]; // vom Team erfasste Gegner
@@ -114,23 +195,30 @@ export class World {
 
   async fetch(request) {
     const url = new URL(request.url);
-    // ---- Kontenspeicher (Instanz "konten", nur intern erreichbar) ----
+    // ---- Kontenspeicher (Instanz "konten", nur intern über Durable-Object-Stub erreichbar) ----
     if (url.pathname === "/acct") {
-      const token = url.searchParams.get("token") || "";
-      if (!TOKEN_RE.test(token)) return new Response("bad token", { status: 400 });
+      const st = this.state.storage;
       if (request.method === "POST") {
-        const body = await request.json();
-        const acct = {
-          money: Math.max(0, Math.floor(+body.money || 0)),
-          owned: (Array.isArray(body.owned) ? body.owned : []).filter((t) => BOATS[t]),
-          loadout: body.loadout && typeof body.loadout === "object" ? body.loadout : {},
-        };
-        for (const s of START_SHIP) if (!acct.owned.includes(s)) acct.owned.push(s);
-        await this.state.storage.put(`a:${token}`, acct);
+        const id = url.searchParams.get("id") || "";
+        if (!TOKEN_RE.test(id)) return new Response("bad id", { status: 400 });
+        const old = (await st.get(`a:${id}`)) || {};
+        if (old.moved) return new Response("moved", { status: 410 }); // Gastkonto wurde registriert
+        await st.put(`a:${id}`, { ...cleanAccount(await request.json()), reg: !!old.reg, name: old.name });
         return new Response("ok");
       }
-      return Response.json((await this.state.storage.get(`a:${token}`)) || defaultAccount());
+      const token = url.searchParams.get("token") || "";
+      const id = await this.resolveToken(token);
+      if (!id) return json({ error: "session" }, 401);
+      const a = (await st.get(`a:${id}`)) || defaultAccount();
+      return json({ ...a, id });
     }
+    if (url.pathname.startsWith("/auth/")) return this.authRequest(url.pathname.slice(6), request);
+    if (url.pathname === "/name") {
+      const n = (url.searchParams.get("n") || "").toLowerCase();
+      return json({ taken: !!(await this.state.storage.get(`u:${n}`)) });
+    }
+    // ---- Öffentliche Konto-Schnittstelle (Spielwelt) ----
+    if (url.pathname.startsWith("/api/")) return this.apiRequest(url.pathname.slice(5), request);
     // ---- Frontkarte (Instanz "front", nur intern erreichbar) ----
     if (url.pathname === "/front") {
       if (request.method === "POST") {
@@ -149,10 +237,14 @@ export class World {
       }
       const token = url.searchParams.get("token");
       const account = token ? await this.getAccount(token) : null;
-      return Response.json(
-        { teams, front: this.front, account: account && { money: account.money, owned: account.owned } },
-        { headers: { "cache-control": "no-store" } }
-      );
+      return json({
+        teams,
+        front: this.front,
+        season: this.seasonInfo(),
+        env: this.envRow(),
+        account: account ? this.accountSummary(account) : null,
+        auth: token && !account ? "invalid" : undefined,
+      });
     }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
@@ -167,21 +259,165 @@ export class World {
     return this.env.WORLD.get(this.env.WORLD.idFromName("konten"));
   }
 
+  // Schlüssel → Konto-ID (nur Instanz "konten"): Sitzung eines registrierten Kontos oder Gast
+  async resolveToken(token) {
+    if (!TOKEN_RE.test(token)) return null;
+    const st = this.state.storage;
+    const sess = await st.get(`s:${token}`);
+    if (sess) {
+      if (Date.now() - sess.c > SESSION_LIFE) {
+        await st.delete(`s:${token}`);
+        return null;
+      }
+      return sess.id;
+    }
+    // 64-stellige Hex-Schlüssel sind nur als Sitzung gültig (abgemeldet/abgelaufen → kein Gastzugang)
+    if (/^[0-9a-f]{64}$/.test(token)) return null;
+    const a = await st.get(`a:${token}`);
+    if (a && (a.reg || a.moved)) return null; // Konto-ID oder alter Gastschlüssel eines registrierten Kontos: kein Zugang
+    return token;
+  }
+
+  // Anmeldung (nur Instanz "konten")
+  async authRequest(action, request) {
+    const st = this.state.storage;
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ ok: false, m: "Ungültige Anfrage" }, 400);
+    }
+    const name = String(body.name || "").trim();
+    const lower = name.toLowerCase();
+    const password = String(body.password || "");
+    if (action === "logout") {
+      if (TOKEN_RE.test(body.token || "")) await st.delete(`s:${body.token}`);
+      return json({ ok: true });
+    }
+    if (action === "register") {
+      if (!NAME_RE.test(name)) return json({ ok: false, m: "Name: 3–16 Zeichen, nur Buchstaben, Ziffern, _ und -" }, 400);
+      if (password.length < PW_MIN || password.length > PW_MAX) return json({ ok: false, m: `Passwort: mindestens ${PW_MIN} Zeichen` }, 400);
+      if (password.toLowerCase() === lower) return json({ ok: false, m: "Passwort darf nicht der Name sein" }, 400);
+      if (await st.get(`u:${lower}`)) return json({ ok: false, m: "Dieser Name ist schon vergeben" }, 409);
+      const salt = randomHex(16);
+      const hash = await pbkdf2(password, salt, PBKDF2_ITER);
+      if (await st.get(`u:${lower}`)) return json({ ok: false, m: "Dieser Name ist schon vergeben" }, 409);
+      // Fortschritt des bisherigen Gastkontos übernehmen
+      const oldId = TOKEN_RE.test(body.token || "") ? await this.resolveToken(body.token) : null;
+      const old = oldId ? await st.get(`a:${oldId}`) : null;
+      const migrate = old && !old.reg && !old.moved;
+      const id = randomHex(32);
+      await st.put(`a:${id}`, { ...(migrate ? cleanAccount(old) : defaultAccount()), reg: true, name });
+      if (migrate) await st.put(`a:${oldId}`, { moved: true });
+      // Platz für weitere Anmeldewege (z. B. Google: google = Konto-Kennung von Google)
+      await st.put(`u:${lower}`, { id, name, salt, hash, iter: PBKDF2_ITER, created: Date.now() });
+      const token = randomHex(32);
+      await st.put(`s:${token}`, { id, c: Date.now() });
+      return json({ ok: true, token, id, oldId: migrate ? oldId : null, name });
+    }
+    if (action === "login") {
+      const now = Date.now();
+      const keys = [`n:${lower}`, `ip:${String(body.ip || "")}`];
+      for (const k of keys) {
+        const f = this.authFails.get(k);
+        if (f && now - f.t < AUTH_WINDOW && f.n >= AUTH_MAX_FAILS) return json({ ok: false, m: "Zu viele Fehlversuche – bitte in 15 Minuten erneut versuchen" }, 429);
+      }
+      const rec = NAME_RE.test(name) ? await st.get(`u:${lower}`) : null;
+      // Auch ohne Konto rechnen, damit die Antwortzeit nichts verrät
+      const hash = await pbkdf2(password.slice(0, PW_MAX), rec ? rec.salt : "00112233445566778899aabbccddeeff", rec ? rec.iter : PBKDF2_ITER);
+      if (!rec || !safeEqual(hash, rec.hash)) {
+        for (const k of keys) {
+          const f = this.authFails.get(k);
+          this.authFails.set(k, f && now - f.t < AUTH_WINDOW ? { n: f.n + 1, t: f.t } : { n: 1, t: now });
+        }
+        if (this.authFails.size > 5000) this.authFails.clear();
+        return json({ ok: false, m: "Name oder Passwort falsch" }, 401);
+      }
+      this.authFails.delete(keys[0]);
+      const token = randomHex(32);
+      await st.put(`s:${token}`, { id: rec.id, c: now });
+      return json({ ok: true, token, id: rec.id, name: rec.name });
+    }
+    return json({ ok: false, m: "Unbekannt" }, 404);
+  }
+
+  // Öffentliche Schnittstelle der Spielwelt: leitet Anmeldungen an "konten" weiter und hält den Zwischenspeicher aktuell
+  async apiRequest(action, request) {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ ok: false, m: "Ungültige Anfrage" }, 400);
+    }
+    const ip = request.headers.get("x-ip") || "";
+    const auth = async (a, payload) => {
+      const r = await this.kontenStub().fetch(`https://konten/auth/${a}`, { method: "POST", body: JSON.stringify(payload) });
+      return { status: r.status, data: await r.json() };
+    };
+    if (action === "register") {
+      // Ungespeicherten Spielstand des Gastkontos vorher sichern
+      const oldToken = TOKEN_RE.test(body.token || "") ? body.token : null;
+      const oldId = oldToken ? this.tokenIds.get(oldToken) : null;
+      if (oldId) await this.flushAccounts(true);
+      const { status, data } = await auth("register", { name: body.name, password: body.password, token: oldToken });
+      if (data.ok) {
+        if (data.oldId && this.accounts.has(data.oldId)) {
+          const a = this.accounts.get(data.oldId);
+          this.accounts.delete(data.oldId);
+          Object.assign(a, { id: data.id, reg: true, name: data.name });
+          this.accounts.set(data.id, a);
+        }
+        if (oldToken) this.tokenIds.delete(oldToken);
+        this.tokenIds.set(data.token, data.id);
+        this.nameCache.set(data.name.toLowerCase(), { taken: true, t: Date.now() });
+      }
+      return json({ ok: data.ok, m: data.m, token: data.token, name: data.name }, status);
+    }
+    if (action === "login") {
+      const { status, data } = await auth("login", { name: body.name, password: body.password, ip });
+      if (data.ok) this.tokenIds.set(data.token, data.id);
+      return json({ ok: data.ok, m: data.m, token: data.token, name: data.name }, status);
+    }
+    if (action === "logout") {
+      if (TOKEN_RE.test(body.token || "")) {
+        this.tokenIds.delete(body.token);
+        await auth("logout", { token: body.token });
+      }
+      return json({ ok: true });
+    }
+    if (action === "buy") {
+      await this.ensureFront();
+      const acct = await this.getAccount(String(body.token || ""));
+      if (!acct) return json({ ok: false, m: "Bitte neu anmelden" }, 401);
+      const r = this.purchase(acct, String(body.item || ""), null);
+      if (r.ok) await this.flushAccounts(true);
+      return json({ ...r, account: this.accountSummary(acct) });
+    }
+    return json({ ok: false, m: "Unbekannt" }, 404);
+  }
+
   async getAccount(token) {
     if (!TOKEN_RE.test(token)) return null;
-    let a = this.accounts.get(token);
-    if (a) {
+    const known = this.tokenIds.get(token);
+    if (known && this.accounts.has(known)) {
+      const a = this.accounts.get(known);
       a.seen = Date.now();
       return a;
     }
+    let a;
     try {
       const r = await this.kontenStub().fetch(`https://konten/acct?token=${token}`);
+      if (r.status === 401) {
+        this.tokenIds.delete(token);
+        return null; // Sitzung abgelaufen oder ungültig
+      }
       const data = await r.json();
-      a = { money: data.money | 0, owned: data.owned || [...START_SHIP], loadout: data.loadout || {}, dirty: false };
+      const clean = cleanAccount(data);
+      a = { id: data.id, ...clean, reg: !!data.reg, name: data.name || null, dirty: false };
     } catch {
-      a = { ...defaultAccount(), dirty: false };
+      return { id: null, ...defaultAccount(), dirty: false, temp: true };
     }
-    for (const s of START_SHIP) if (!a.owned.includes(s)) a.owned.push(s);
+    this.tokenIds.set(token, a.id);
     // Wer den Träger vor der Aufteilung in Nationen gekauft hat, bekommt auch das Gegenstück
     if (a.owned.includes("carrier") && !a.owned.includes("america")) {
       a.owned.push("america");
@@ -189,30 +425,144 @@ export class World {
     }
     // Nur für lokale Tests (wrangler dev --var DEV_START_MONEY:…): neue Konten mit Startguthaben
     if (this.env.DEV_START_MONEY && a.money === 0 && a.owned.length <= START_SHIP.length) a.money = +this.env.DEV_START_MONEY || 0;
-    if (!this.accounts.has(token)) this.accounts.set(token, a);
-    a = this.accounts.get(token);
+    if (this.env.DEV_START_XP && !a.xp) a.xp = +this.env.DEV_START_XP || 0;
+    if (!this.accounts.has(a.id)) this.accounts.set(a.id, a);
+    a = this.accounts.get(a.id);
+    this.applySeason(a);
     a.seen = Date.now();
     return a;
   }
 
-  async flushAccounts() {
-    const inUse = new Set([...this.players.values()].map((p) => p.token));
-    for (const [token, a] of this.accounts) {
-      if (a.dirty) {
+  accountSummary(a) {
+    return {
+      money: a.money,
+      owned: a.owned,
+      xp: a.xp,
+      rank: rankOf(a.xp),
+      reg: !!a.reg,
+      name: a.name,
+      medals: a.medals,
+      stats: a.stats,
+      sp: a.sp && this.front && a.sp.id === this.front.season ? a.sp.pts : [0, 0],
+      notice: a.notice,
+    };
+  }
+
+  async flushAccounts(force) {
+    const inUse = new Set([...this.players.values()].map((p) => p.acct && p.acct.id));
+    for (const [id, a] of this.accounts) {
+      if (a.dirty && !a.temp && id) {
         a.dirty = false;
         try {
-          await this.kontenStub().fetch(`https://konten/acct?token=${token}`, {
+          const r = await this.kontenStub().fetch(`https://konten/acct?id=${id}`, {
             method: "POST",
-            body: JSON.stringify({ money: a.money, owned: a.owned, loadout: a.loadout || {} }),
+            body: JSON.stringify({ money: a.money, owned: a.owned, loadout: a.loadout || {}, xp: a.xp, stats: a.stats, sp: a.sp, medals: a.medals }),
           });
+          if (r.status === 410) a.temp = true; // Gastkonto inzwischen registriert: nicht mehr hierhin speichern
         } catch {
           a.dirty = true;
         }
       }
       // Erst nach einer Minute ohne Benutzung aus dem Zwischenspeicher nehmen (sonst kann ein
       // gerade beitretender Spieler ein Konto halten, das nicht mehr gespeichert wird)
-      if (!a.dirty && !inUse.has(token) && Date.now() - (a.seen || 0) > 60000) this.accounts.delete(token);
+      if (!force && !a.dirty && !inUse.has(id) && Date.now() - (a.seen || 0) > 60000) {
+        this.accounts.delete(id);
+        for (const [t, i] of this.tokenIds) if (i === id) this.tokenIds.delete(t);
+      }
     }
+  }
+
+  // Für Gäste gesperrte Namen (registriert)
+  async nameTaken(name) {
+    const lower = name.toLowerCase();
+    const c = this.nameCache.get(lower);
+    if (c && Date.now() - c.t < 300000) return c.taken;
+    let taken = false;
+    try {
+      const r = await this.kontenStub().fetch(`https://konten/name?n=${encodeURIComponent(lower)}`);
+      taken = !!(await r.json()).taken;
+    } catch {}
+    if (this.nameCache.size > 2000) this.nameCache.clear();
+    this.nameCache.set(lower, { taken, t: Date.now() });
+    return taken;
+  }
+
+  // ---------- Erfahrung, Dienstgrade, Saison ----------
+  addXp(p, amount) {
+    const a = p && p.acct;
+    if (!a || amount <= 0) return;
+    const before = rankOf(a.xp);
+    a.xpFrac = (a.xpFrac || 0) + amount;
+    const whole = Math.floor(a.xpFrac);
+    if (whole <= 0) return;
+    a.xpFrac -= whole;
+    a.xp = (a.xp || 0) + whole;
+    const sid = this.front ? this.front.season : seasonOf(Date.now());
+    if (!a.sp || a.sp.id !== sid) a.sp = { id: sid, pts: [0, 0] };
+    a.sp.pts[p.team] += whole;
+    a.dirty = true;
+    const after = rankOf(a.xp);
+    if (after > before) {
+      this.send(p.ws, { t: "rank", r: after, name: RANKS[after].name });
+      p.rank = after;
+    }
+  }
+
+  stat(p, key) {
+    if (!p || !p.acct) return;
+    p.acct.stats = p.acct.stats || {};
+    p.acct.stats[key] = (p.acct.stats[key] || 0) + 1;
+    p.acct.dirty = true;
+  }
+
+  // Medaille vergeben, wenn die Saison des Kontos vorbei ist und sein Team gewonnen hat
+  applySeason(a) {
+    if (!this.front || !a.sp || a.sp.id >= this.front.season) return;
+    const h = (this.front.hist || []).find((e) => e.id === a.sp.id);
+    if (h && h.winner >= 0 && a.sp.pts[h.winner] >= SEASON.minPoints) {
+      a.medals = [...(a.medals || []), { s: h.id, t: h.winner }];
+      a.money += SEASON.medalBonus;
+      a.notice = `Saison ${h.id} gewonnen – Medaille und ${SEASON.medalBonus.toLocaleString("de-DE")} Taler!`;
+    }
+    a.sp = null;
+    a.dirty = true;
+  }
+
+  seasonInfo() {
+    const id = this.front ? this.front.season : seasonOf(Date.now());
+    return { id, end: seasonEnd(id), hist: this.front ? (this.front.hist || []).slice(-5) : [] };
+  }
+
+  // Saisonwechsel: Sieger festhalten, Frontkarte zurücksetzen, Medaillen der anwesenden Konten vergeben
+  checkSeason() {
+    const f = this.front;
+    if (!f) return;
+    const cur = seasonOf(Date.now());
+    if (f.season === cur) return;
+    if (f.season) {
+      const c = [f.own.filter((o) => o === 0).length, f.own.filter((o) => o === 1).length];
+      const winner = c[0] > c[1] ? 0 : c[1] > c[0] ? 1 : -1;
+      f.hist = [...(f.hist || []), { id: f.season, winner, c }].slice(-30);
+      f.own = f.own.map(() => -1);
+      f.prog = f.prog.map(() => 0);
+      this.broadcast({ t: "season", ended: f.season, winner, next: cur });
+    }
+    f.season = cur;
+    this.frontDirty = true;
+    this.flushFront();
+    for (const a of this.accounts.values()) {
+      const before = a.notice;
+      this.applySeason(a);
+      if (a.notice && a.notice !== before) {
+        for (const p of this.players.values()) if (p.acct === a) this.send(p.ws, { t: "reward", a: SEASON.medalBonus, m: a.notice });
+      }
+    }
+  }
+
+  // ---------- Tageszeit und Wetter ----------
+  envRow() {
+    const e = this.wx;
+    return [Math.round(e.h * 100) / 100, e.w, e.p, Math.round(e.k * 100) / 100];
   }
 
   // Chat: an alle oder nur ans eigene Team; ":DEV_GIVE_TALER_<Wert>" ist ein Entwickler-Befehl
@@ -246,10 +596,12 @@ export class World {
     }
   }
 
+  // Gefechtsbelohnung: Taler und Erfahrung (ein Zehntel)
   addMoney(p, amount, why) {
     if (!p || !p.acct || amount <= 0) return;
     p.acct.money += Math.round(amount);
     p.acct.dirty = true;
+    this.addXp(p, amount * XP_PER_TALER);
     if (why) this.send(p.ws, { t: "reward", a: Math.round(amount), m: why });
   }
 
@@ -268,8 +620,9 @@ export class World {
       f = await r.json();
     } catch {}
     if (this.front) return;
-    if (!f || !Array.isArray(f.own) || f.own.length !== n) f = { own: Array(n).fill(-1), prog: Array(n).fill(0) };
+    if (!f || !Array.isArray(f.own) || f.own.length !== n) f = { ...(f || {}), own: Array(n).fill(-1), prog: Array(n).fill(0) };
     this.front = f;
+    this.checkSeason();
   }
 
   async flushFront() {
@@ -291,8 +644,9 @@ export class World {
       const present = [[], []];
       for (const p of this.players.values()) {
         const def = BOATS[p.type];
-        if (def.kind === "drone") continue;
+        if (def.kind === "drone" || def.kind === "jet") continue;
         if (def.kind === "heli" && (p.b.z || 0) > ALTITUDE.captureHeli) continue;
+        if (isSub(def) && (p.b.z || 0) < DEPTH.periscope) continue;
         if (Math.hypot(p.b.x - o.x, p.b.y - o.y) < o.r) {
           n[p.team]++;
           present[p.team].push(p);
@@ -314,8 +668,10 @@ export class World {
         f.own[o.id] = own;
         this.broadcast({ t: "front", i: o.id, own, prev: prevOwn, by: team });
         for (const p of present[team]) {
-          if (own === team) this.addMoney(p, ECONOMY.capture, `Stützpunkt ${o.name} erobert`);
-          else this.addMoney(p, ECONOMY.neutralize, `Stützpunkt ${o.name} neutralisiert`);
+          if (own === team) {
+            this.addMoney(p, ECONOMY.capture, `Stützpunkt ${o.name} erobert`);
+            this.stat(p, "caps");
+          } else this.addMoney(p, ECONOMY.neutralize, `Stützpunkt ${o.name} neutralisiert`);
         }
         this.flushFront();
       }
@@ -349,14 +705,25 @@ export class World {
         }
         await this.ensureFront();
         const token = TOKEN_RE.test(msg.token || "") ? msg.token : null;
-        const acct = token ? await this.getAccount(token) : { ...defaultAccount(), dirty: false };
+        let acct = token ? await this.getAccount(token) : null;
+        if (!acct) {
+          // Ungültige oder abgelaufene Sitzung: als Gast ohne Speicherung spielen, Client meldet neu an
+          if (token) this.send(ws, { t: "auth", m: "Sitzung abgelaufen – bitte neu anmelden." });
+          acct = { id: null, ...defaultAccount(), dirty: false, temp: true };
+        }
+        // Registrierte Spieler heißen wie ihr Konto, Gäste dürfen keinen registrierten Namen tragen
+        let name = sanitizeName(msg.name);
+        if (acct.reg && acct.name) name = acct.name;
+        else if (await this.nameTaken(name)) name = `Gast-${100 + Math.floor(Math.random() * 900)}`;
         const team = msg.team === 1 ? 1 : 0;
         const { type, spawn, carrierId, note } = this.chooseSpawn(team, String(msg.spawn || ""), String(msg.loc || ""), acct);
-        player = this.createPlayer(ws, msg.name, team, type, spawn, () => {
+        player = this.createPlayer(ws, name, team, type, spawn, () => {
           player = null;
         });
         player.token = token;
         player.acct = acct;
+        player.reg = !!acct.reg;
+        player.rank = rankOf(acct.xp);
         player.carrierId = carrierId || 0;
         this.resetLoadout(player); // jetzt mit der im Konto gespeicherten Hangar-Bewaffnung
         if (carrierId && player.spot !== undefined) player.landed = { kind: "carrier", carrierId, spot: player.spot };
@@ -368,9 +735,12 @@ export class World {
           team: player.team,
           type: player.type,
           note,
-          players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, type: p.type, team: p.team })),
+          name: player.name,
+          acct: this.accountSummary(acct),
+          players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, type: p.type, team: p.team, reg: p.reg })),
         });
-        this.broadcast({ t: "join", id: player.id, name: player.name, type: player.type, team: player.team }, player.id);
+        if (acct.notice) acct.notice = null;
+        this.broadcast({ t: "join", id: player.id, name: player.name, type: player.type, team: player.team, reg: player.reg }, player.id);
         this.ensureLoop();
         return;
       }
@@ -378,7 +748,7 @@ export class World {
       if (msg.t === "in") {
         const seq = msg.s | 0;
         if (seq <= player.ack) return;
-        player.queue.push({ s: seq, th: +msg.th || 0, ru: +msg.ru || 0, up: +msg.up || 0 });
+        player.queue.push({ s: seq, th: +msg.th || 0, ru: +msg.ru || 0, up: +msg.up || 0, ab: msg.ab ? 1 : 0 });
         if (player.queue.length > MAX_QUEUE) player.queue.splice(0, player.queue.length - MAX_QUEUE);
         const mx = +msg.mx;
         const my = +msg.my;
@@ -435,6 +805,23 @@ export class World {
       }
       return { type: heliType, spawn: helipadSpawn(team, Math.floor(Math.random() * 3)) };
     }
+    if (want.startsWith("jet:")) {
+      // "jet:<typ>:af" (Startbahn) oder "jet:<typ>:<trägerId>" (Senkrechtstarter auf dem Trägerdeck)
+      const [, jt, where] = want.split(":");
+      const jd = BOATS[jt];
+      if (!jd || jd.kind !== "jet" || jd.team !== team) return fallback();
+      if (!acct.owned.includes(jt)) return fallback(`${jd.short} noch nicht gekauft – Start mit dem Standardschiff.`);
+      if (where && where !== "af" && jd.vtol) {
+        const c = this.players.get(+where);
+        if (c && c.team === team && BOATS[c.type].carrier && this.freeHeliSpots(c) > 0) {
+          const spot = this.freeSpot(c);
+          const s = heliSpotWorld(c.b, spot, BOATS[c.type]);
+          return { type: jt, spawn: { ...s, spot }, carrierId: c.id };
+        }
+        return { type: jt, spawn: this.runwaySpawn(team, jd), note: "Trägerdeck nicht mehr frei – Start von der Bahn." };
+      }
+      return { type: jt, spawn: this.runwaySpawn(team, jd) };
+    }
     if (want.startsWith("heli")) {
       const wantedId = +want.split(":")[1] || 0;
       const c = this.players.get(wantedId);
@@ -443,16 +830,12 @@ export class World {
         return { ...r, note: "Landedeck nicht mehr frei – Start vom Flugfeld." };
       }
       const cdef = BOATS[c.type];
-      // Jeder Landeplatz trägt genau einen Hubschrauber, bis dieser zerstört ist
-      const reserved = new Set([...this.players.values()].filter((p) => p.carrierId === c.id).map((p) => p.spot));
-      const landed = new Set([...this.players.values()].filter((p) => p.landed && p.landed.carrierId === c.id).map((p) => p.landed.spot));
-      let spot = cdef.heliSpots.findIndex((_, i) => !reserved.has(i) && !landed.has(i));
-      if (spot < 0) spot = cdef.heliSpots.findIndex((_, i) => !reserved.has(i));
+      const spot = this.freeSpot(c);
       const s = heliSpotWorld(c.b, spot, cdef);
       return { type: cdef.heliType, spawn: { ...s, spot }, carrierId: c.id };
     }
     const def = BOATS[want];
-    if (!def || def.kind !== "ship" || def.team !== team) return fallback();
+    if (!def || (def.kind !== "ship" && def.kind !== "sub") || def.team !== team) return fallback();
     if (!acct.owned.includes(want)) return fallback(`${def.short} noch nicht gekauft – Start mit dem Standardschiff.`);
     if (loc.startsWith("op:") && (def.carrier || def.level > FRONT.maxSpawnLevel)) {
       return { type: want, spawn: this.spawnInHarbor(team, def), note: `${def.short} ist zu groß für den Stützpunkt – Start im Heimathafen.` };
@@ -466,6 +849,21 @@ export class World {
       return { type: want, spawn: this.spawnInHarbor(team, def), note: "Stützpunkt nicht mehr in eurer Hand – Start im Hafen." };
     }
     return { type: want, spawn: def.carrier ? this.spawnCarrier(team, def) : this.spawnInHarbor(team, def) };
+  }
+
+  // Jeder Landeplatz trägt genau ein Luftfahrzeug, bis dieses zerstört ist
+  freeSpot(c) {
+    const cdef = BOATS[c.type];
+    const reserved = new Set([...this.players.values()].filter((p) => p.carrierId === c.id).map((p) => p.spot));
+    const landed = new Set([...this.players.values()].filter((p) => p.landed && p.landed.carrierId === c.id).map((p) => p.landed.spot));
+    let spot = cdef.heliSpots.findIndex((_, i) => !reserved.has(i) && !landed.has(i));
+    if (spot < 0) spot = cdef.heliSpots.findIndex((_, i) => !reserved.has(i));
+    return spot;
+  }
+
+  // Jets rollen am Südende der Bahn an (wie Drohnen)
+  runwaySpawn(team, def) {
+    return { ...runwayStart(team), v: def.minSpeed || 60, zt: 800 };
   }
 
   freeHeliSpots(carrier) {
@@ -482,7 +880,7 @@ export class World {
       type,
       ws,
       onDeath,
-      b: { x: spawn.x, y: spawn.y, h: spawn.h, v: 0, w: 0, z: 0, zt: 0 },
+      b: { x: spawn.x, y: spawn.y, h: spawn.h, v: spawn.v || 0, w: 0, z: 0, zt: spawn.zt || 0 },
       spot: spawn.spot,
       queue: [],
       last: { th: 0, ru: 0 },
@@ -513,6 +911,7 @@ export class World {
     p.abCd = 0;
     p.radarOn = true;
     p.landed = null;
+    if (def.fuel) p.b.fuel = def.fuel;
     // Bewaffnung: Standard des Typs, Hangar-Auswahl aus dem Konto
     p.weapons = [...def.weapons];
     const saved = p.acct && p.acct.loadout && p.acct.loadout[p.type];
@@ -531,7 +930,7 @@ export class World {
     {
       const W = WEAPONS[w];
       if (W.kind === "ssm") p.ws_[w] = { cd: 0, cells: def.ssm.map(() => 0) };
-      else if (W.kind === "gun" || W.kind === "mg") p.ws_[w] = { cd: 0 };
+      else if (W.kind === "gun" || W.kind === "mg" || W.kind === "jgun") p.ws_[w] = { cd: 0 };
       else if (W.kind === "jam") p.ws_[w] = { cd: 0, act: 0 };
       else {
         const max = (def.mags && def.mags[w]) || W.magazine || W.count;
@@ -563,8 +962,10 @@ export class World {
   checkLanding(p) {
     const def = BOATS[p.type];
     if (p.landed || !isAir(def) || p.ackLaunch > 0) return;
-    if (def.kind === "drone") {
-      if (Math.abs(p.b.v) <= def.minSpeed + 4 && (p.b.z || 0) <= ALTITUDE.landDrone && inRect(runwayRect(p.team), p.b.x, p.b.y)) {
+    // Bahnlandung: Drohnen und Jets langsam und tief über der eigenen Bahn
+    const slowEnough = def.kind === "drone" ? Math.abs(p.b.v) <= def.minSpeed + 4 : def.kind === "jet" && Math.abs(p.b.v) <= def.landSpeed;
+    if (def.kind === "drone" || (def.kind === "jet" && (!def.vtol || Math.abs(p.b.v) > 8))) {
+      if (slowEnough && (p.b.z || 0) <= ALTITUDE.landDrone && inRect(runwayRect(p.team), p.b.x, p.b.y)) {
         const others = [...this.players.values()];
         let spot = apronSpot(p.team, 0);
         for (let i = 0; i < 4; i++) {
@@ -580,10 +981,12 @@ export class World {
       }
       return;
     }
-    if (Math.abs(p.b.v) > 6 || (p.b.z || 0) > ALTITUDE.landHeli) return;
+    // Schwebend landen: Hubschrauber und Senkrechtstarter (Jets nur auf Trägern)
+    if (Math.abs(p.b.v) > (def.kind === "jet" ? 8 : 6) || (p.b.z || 0) > ALTITUDE.landHeli) return;
     for (const c of this.players.values()) {
       const cd = BOATS[c.type];
       if (!cd.heliSpots || c.team !== p.team) continue;
+      if (def.kind === "jet" && !cd.carrier) continue;
       for (let i = 0; i < cd.heliSpots.length; i++) {
         const sp = heliSpotWorld(c.b, i, cd);
         if (Math.hypot(sp.x - p.b.x, sp.y - p.b.y) > 18) continue;
@@ -598,16 +1001,17 @@ export class World {
     if (inRect(airfieldRect(p.team), p.b.x, p.b.y)) {
       p.b.v = 0;
       p.b.z = p.b.zt = 0;
-      p.landed = { kind: "airfield" };
+      p.landed = { kind: "airfield", pad: true };
       this.send(p.ws, { t: "landed", where: "Flugfeld" });
     }
   }
 
   takeOff(p) {
     const def = BOATS[p.type];
-    if (def.kind === "drone") {
+    const hover = p.landed && (p.landed.kind === "carrier" || p.landed.pad);
+    if (def.kind === "drone" || (def.kind === "jet" && !(def.vtol && hover))) {
       const s = runwayStart(p.team);
-      Object.assign(p.b, { x: s.x, y: s.y, h: s.h, v: def.minSpeed, w: 0, z: 0, zt: 900 });
+      Object.assign(p.b, { x: s.x, y: s.y, h: s.h, v: def.kind === "jet" ? Math.max(60, def.minSpeed) : def.minSpeed, w: 0, z: 0, zt: def.kind === "jet" ? 800 : 900 });
     } else {
       p.b.z = 0;
       p.b.zt = 60; // Hubschrauber steigt nach dem Abheben auf 60 m
@@ -649,25 +1053,36 @@ export class World {
   // ---------- Laden ----------
 
   inOwnHarbor(p) {
-    return BOATS[p.type].kind === "ship" && inRect(harborRect(teamBase(p.team)), p.b.x, p.b.y);
+    const k = BOATS[p.type].kind;
+    return (k === "ship" || k === "sub") && inRect(harborRect(teamBase(p.team)), p.b.x, p.b.y);
+  }
+
+  // Kauf eines Fahrzeugs (Schiff, U-Boot, Jet): genug Taler und Dienstgrad
+  purchase(acct, item, team) {
+    const def = BOATS[item];
+    if (!def || !isBuyable(def) || (team !== null && def.team !== team) || !acct || acct.temp) return { ok: false, m: "Nicht verfügbar." };
+    if (acct.owned.includes(item)) return { ok: false, m: "Bereits gekauft." };
+    const need = def.rank || 0;
+    if (rankOf(acct.xp) < need) return { ok: false, m: `Dienstgrad ${RANKS[need].name} nötig.` };
+    if (acct.money < def.price) return { ok: false, m: "Nicht genug Taler." };
+    acct.money -= def.price;
+    acct.owned.push(item);
+    acct.dirty = true;
+    return { ok: true, m: `${def.short} gekauft!` };
   }
 
   buy(p, ship) {
-    const def = BOATS[ship];
-    if (!def || def.kind !== "ship" || def.team !== p.team || !p.acct) return;
-    if (p.acct.owned.includes(ship)) return this.send(p.ws, { t: "shop", ok: false, m: "Bereits gekauft." });
-    if (!this.inOwnHarbor(p)) return this.send(p.ws, { t: "shop", ok: false, m: "Der Laden ist nur im eigenen Hafen geöffnet." });
-    if (p.acct.money < def.price) return this.send(p.ws, { t: "shop", ok: false, m: "Nicht genug Taler." });
-    p.acct.money -= def.price;
-    p.acct.owned.push(ship);
-    p.acct.dirty = true;
-    this.flushAccounts();
-    this.send(p.ws, { t: "shop", ok: true, m: `${def.short} gekauft!`, owned: p.acct.owned });
+    if (!p.acct) return;
+    const atBase = this.inOwnHarbor(p) || (p.landed && p.landed.kind === "airfield");
+    if (!atBase) return this.send(p.ws, { t: "shop", ok: false, m: "Der Laden ist nur im eigenen Hafen oder auf dem Flugfeld geöffnet." });
+    const r = this.purchase(p.acct, ship, p.team);
+    if (r.ok) this.flushAccounts();
+    this.send(p.ws, { t: "shop", ok: r.ok, m: r.m, owned: p.acct.owned });
   }
 
   switchShip(p, ship) {
     const def = BOATS[ship];
-    if (!def || def.kind !== "ship" || def.team !== p.team || !p.acct || !p.acct.owned.includes(ship) || ship === p.type) return;
+    if (!def || (def.kind !== "ship" && def.kind !== "sub") || def.team !== p.team || !p.acct || !p.acct.owned.includes(ship) || ship === p.type) return;
     if (!this.inOwnHarbor(p)) return this.send(p.ws, { t: "shop", ok: false, m: "Schiffswechsel nur im eigenen Hafen." });
     for (const o of this.players.values()) if (o.carrierId === p.id) o.carrierId = 0;
     p.type = ship;
@@ -683,6 +1098,10 @@ export class World {
   }
 
   // ---------- Sensoren ----------
+
+  flaresOn(p) {
+    return BOATS[p.type].ability === "flares" && p.abT > 0;
+  }
 
   emitting(p) {
     const def = BOATS[p.type];
@@ -721,33 +1140,43 @@ export class World {
     return null;
   }
 
-  // Welche Gegner erfasst jedes Team? (eigene Fahrzeuge, Basis, gehaltene Stützpunkte)
+  // Welche Gegner erfasst jedes Team? Radar/Sicht (r) und Sonar (sr) von Fahrzeugen, Basis und Stützpunkten.
+  // Getauchte U-Boote hört nur Sonar (leise = schwer), Luftfahrzeuge sieht nur Radar/Sicht. Wetter und Nacht wirken mit.
   computeDetection() {
     const list = [...this.players.values()];
+    const F = this.wxF;
     const sources = [[], []];
     for (const p of list) {
       const def = BOATS[p.type];
       const abilityRadar = p.abT > 0 && def.ability === "radar";
       const jam = this.jammedAt(p.b.x, p.b.y, p.team) ? WEAPONS.jammer.sensorFactor : 1;
-      sources[p.team].push({ x: p.b.x, y: p.b.y, r: sensorRange(def, p.radarOn, abilityRadar, p.b.z || 0) * jam });
+      sources[p.team].push({ x: p.b.x, y: p.b.y, r: sensorRange(def, p.radarOn, abilityRadar, p.b.z || 0, F) * jam, sr: sonarRange(def, p.b, F) });
     }
     for (const t of [0, 1]) {
       const hr = harborRect(teamBase(t));
-      sources[t].push({ x: (hr.x0 + hr.x1) / 2, y: 0, r: SENSORS.base });
+      sources[t].push({ x: (hr.x0 + hr.x1) / 2, y: 0, r: SENSORS.base * F.radar, sr: 1500 * F.sonar });
     }
     if (this.front) {
       for (const o of this.map.outposts) {
         const own = this.front.own[o.id];
-        if (own >= 0) sources[own].push({ x: o.x, y: o.y, r: SENSORS.outpost });
+        if (own >= 0) sources[own].push({ x: o.x, y: o.y, r: SENSORS.outpost * F.radar, sr: 1200 * F.sonar });
       }
     }
+    const minVis = 450 * F.vis;
     const det = [new Set(), new Set()];
     for (const e of list) {
       const t = 1 - e.team;
-      const sig = signature(BOATS[e.type], this.emitting(e), e.b.z || 0);
+      const ed = BOATS[e.type];
+      const z = e.b.z || 0;
+      const sub = isSub(ed);
+      const deep = sub && z < DEPTH.periscope;
+      const sig = signature(ed, this.emitting(e), z);
+      const naval = ed.kind === "ship" || sub;
+      const loud = naval ? noiseLevel(ed, e.b) : 0;
+      const minD = sub && z < DEPTH.surface ? 0 : minVis;
       for (const s of sources[t]) {
         const d = Math.hypot(e.b.x - s.x, e.b.y - s.y);
-        if (d < Math.max(450, s.r * sig)) {
+        if ((!deep && s.r > 0 && d < Math.max(minD, s.r * sig)) || (naval && s.sr > 0 && d < s.sr * loud)) {
           det[t].add(e.id);
           break;
         }
@@ -760,8 +1189,17 @@ export class World {
   // ---------- Waffen ----------
 
   // Ziel für Lenkflugkörper: eigener Lock oder Markierung eines Teammitglieds (z. B. Drohne)
-  guidedTarget(p, range, wantShip = true) {
-    const ok = (t) => t && (!wantShip || BOATS[t.type].kind === "ship") && this.det[p.team].has(t.id) && Math.hypot(t.b.x - p.b.x, t.b.y - p.b.y) < range;
+  // want: "ship" (Überwasser inkl. aufgetauchter U-Boote), "naval" (auch getauchte U-Boote), "air" oder null
+  guidedTarget(p, range, want = "ship") {
+    if (want === true) want = "ship";
+    const kindOk = (t) => {
+      const d = BOATS[t.type];
+      if (want === "ship") return d.kind === "ship" || (isSub(d) && (t.b.z || 0) > DEPTH.surface);
+      if (want === "naval") return d.kind === "ship" || isSub(d);
+      if (want === "air") return isAir(d) && !t.landed;
+      return true;
+    };
+    const ok = (t) => t && kindOk(t) && this.det[p.team].has(t.id) && Math.hypot(t.b.x - p.b.x, t.b.y - p.b.y) < range;
     if (p.lockId && p.lockT >= WEAPONS.lock.time) {
       const t = this.players.get(p.lockId);
       if (ok(t)) return t;
@@ -787,6 +1225,14 @@ export class World {
     const W = WEAPONS[w];
     const st = p.ws_[w];
     if (!st || st.cd > 0) return;
+    // U-Boote: Flugkörper nur auf Sehrohrtiefe oder aufgetaucht, Torpedos in jeder Tiefe
+    if (isSub(def) && W.kind !== "torp" && (p.b.z || 0) < DEPTH.periscope) {
+      if (!p.depthMsg || this.tick - p.depthMsg > 40) {
+        p.depthMsg = this.tick;
+        this.send(p.ws, { t: "lockmsg", m: "Flugkörper nur auf Sehrohrtiefe (Q)" });
+      }
+      return;
+    }
     const b = p.b;
     const c = Math.cos(b.h);
     const s = Math.sin(b.h);
@@ -849,6 +1295,70 @@ export class World {
         }
       }
       this.events.push(["hflaunch", x, y, b.h]);
+    } else if (W.kind === "jgun") {
+      // Bordkanone: starr in Flugrichtung
+      st.cd = W.reload;
+      const a = b.h + (Math.random() - 0.5) * 2 * W.spread;
+      const x = b.x + c * (def.length / 2 + 1);
+      const y = b.y + s * (def.length / 2 + 1);
+      this.spawnProj(p, w, x, y, a, W.speed + Math.max(0, b.v));
+      this.events.push(["muzzle", x, y, a]);
+    } else if (W.kind === "aam") {
+      if (st.n <= 0) return;
+      st.n--;
+      st.cd = W.interval;
+      const R = W.rails[st.rail++ % W.rails.length];
+      const x = b.x + R.x * c - R.y * s;
+      const y = b.y + R.x * s + R.y * c;
+      const pr = this.spawnProj(p, w, x, y, b.h, Math.max(80, b.v + 30));
+      // Radar-Flugkörper: gelocktes Luftziel; sonst (und bei IR) Suchkopf Richtung Mauszeiger
+      let t = W.ir ? null : this.guidedTarget(p, W.range, "air");
+      if (!t) t = this.seekAir(pr, Math.atan2(p.my - y, p.mx - x), W.seekerRange, W.seekerCone);
+      if (t) pr.air = t.id;
+      else {
+        pr.tx = p.mx;
+        pr.ty = p.my;
+      }
+      this.events.push(["hflaunch", x, y, b.h]);
+    } else if (W.kind === "bomb") {
+      if (st.n <= 0) return;
+      st.n--;
+      st.cd = W.interval;
+      const R = W.rails[st.rail++ % W.rails.length];
+      const x = b.x + R.x * c - R.y * s;
+      const y = b.y + R.x * s + R.y * c;
+      const pr = this.spawnProj(p, w, x, y, b.h, Math.max(60, b.v));
+      pr.vz = 0;
+      const t = this.guidedTarget(p, W.range, "ship");
+      if (t) pr.target = t.id;
+      else {
+        pr.tx = p.mx;
+        pr.ty = p.my;
+      }
+    } else if (W.kind === "torp") {
+      if (st.n <= 0) return;
+      st.n--;
+      st.cd = W.interval;
+      let x = b.x;
+      let y = b.y;
+      if (def.kind === "ship") {
+        // Torpedorohr an der Bordwand Richtung Ziel
+        const side = Math.sin(toMouse - b.h) >= 0 ? 1 : -1;
+        x = b.x - s * side * (def.beam / 2 + 2);
+        y = b.y + c * side * (def.beam / 2 + 2);
+      } else if (isSub(def)) {
+        x = b.x + c * (def.length / 2);
+        y = b.y + s * (def.length / 2);
+      }
+      const pr = this.spawnProj(p, w, x, y, isAir(def) ? b.h : toMouse, W.speed * 0.6);
+      pr.z = isSub(def) ? Math.min(-8, b.z || 0) : -20;
+      const t = this.guidedTarget(p, W.range, "naval");
+      if (t) pr.target = t.id;
+      else {
+        pr.tx = p.mx;
+        pr.ty = p.my;
+      }
+      this.events.push(["torp", x, y, pr.h]);
     } else if (W.kind === "jam") {
       st.act = W.duration;
       st.cd = W.duration + W.reload;
@@ -906,7 +1416,7 @@ export class World {
       owner: p.id,
       team: p.team,
       x, y, h, v,
-      z: isAir(BOATS[p.type]) ? p.b.z || 0 : ALTITUDE.shipZ,
+      z: isAir(BOATS[p.type]) ? p.b.z || 0 : isSub(BOATS[p.type]) ? Math.max(ALTITUDE.shipZ, p.b.z || 0) : ALTITUDE.shipZ,
       dist: 0,
       range: W.range,
       target: 0,
@@ -925,7 +1435,22 @@ export class World {
     p.abT = A.duration;
     p.abCd = A.duration + A.cooldown;
     if (key === "flares") {
-      for (const q of this.projectiles) if (q.air === p.id) q.air = 0;
+      // Infrarot und Flugabwehr lassen sich sicher täuschen, Radar-Luft-Luft nur zur Hälfte
+      for (const q of this.projectiles) {
+        if (q.air !== p.id) continue;
+        if (q.k === "aam" && !WEAPONS[q.w].ir && Math.random() < 0.5) continue;
+        q.air = 0;
+      }
+    } else if (key === "decoy") {
+      for (const q of this.projectiles) {
+        if (q.k === "torp" && q.target === p.id && Math.random() < A.breakChance) {
+          q.target = 0;
+          q.tx = p.b.x + (Math.random() - 0.5) * 600;
+          q.ty = p.b.y + (Math.random() - 0.5) * 600;
+          q.decoy = true;
+        }
+      }
+      this.events.push(["decoy", p.b.x, p.b.y]);
     }
   }
 
@@ -934,9 +1459,9 @@ export class World {
     const L = WEAPONS.lock;
     const def = BOATS[p.type];
     const radar = p.abT > 0 && def.ability === "radar";
-    const range = Math.max(radar ? ABILITIES.radar.lockRange : L.range, def.kind === "drone" ? def.sensor : 0);
+    const range = Math.max(radar ? ABILITIES.radar.lockRange : L.range, def.kind === "drone" || def.kind === "jet" ? def.sensor : 0, isSub(def) ? def.sonar : 0);
     let best = null;
-    let bestD = radar || def.kind === "drone" ? ABILITIES.radar.pick : L.pick;
+    let bestD = radar || def.kind === "drone" || def.kind === "jet" || isSub(def) ? ABILITIES.radar.pick : L.pick;
     for (const o of this.players.values()) {
       if (o === p || o.team === p.team || !this.det[p.team].has(o.id)) continue;
       const od = BOATS[o.type];
@@ -989,6 +1514,11 @@ export class World {
       return;
     }
     this.tick++;
+    if (this.tick % 20 === 0) {
+      this.wx = envAt(Date.now());
+      this.wxF = envFactors(this.wx);
+    }
+    if (this.tick % 1200 === 0) this.checkSeason();
     const list = [...this.players.values()];
 
     for (const p of list) {
@@ -999,9 +1529,23 @@ export class World {
         if (inp) {
           p.last = inp;
           p.ack = inp.s;
-          if (!p.landed) stepEntity(p.b, inp, def, this.map);
+          if (!p.landed) stepEntity(p.b, inp, def, this.map, this.wxF);
         } else if (steps === 0 && !p.landed) {
-          stepEntity(p.b, p.last, def, this.map);
+          stepEntity(p.b, p.last, def, this.map, this.wxF);
+        }
+      }
+      // Treibstoff der Jets: Schub kostet, Nachbrenner dreifach, Schweben (Senkrechtstarter) mehr
+      if (def.fuel && !p.landed) {
+        const th = Math.max(0, p.last.th || 0);
+        const ab = p.last.ab && def.abSpeed && th > 0.9 ? 3 : 1;
+        const hover = def.vtol && Math.abs(p.b.v) < 60 ? 1.4 : 1;
+        const before = p.b.fuel;
+        p.b.fuel = Math.max(0, p.b.fuel - DT * (0.35 + 0.65 * th) * ab * hover);
+        if (before > def.fuel * 0.2 && p.b.fuel <= def.fuel * 0.2) this.send(p.ws, { t: "lockmsg", m: "BINGO FUEL – zurück zur Basis!" });
+        if (before > 0 && p.b.fuel <= 0) this.send(p.ws, { t: "lockmsg", m: "Treibstoff leer – Triebwerk aus!" });
+        if (p.b.fuel <= 0 && (p.b.z || 0) <= 1) {
+          this.damage(p, 9999, null, true); // Absturz
+          continue;
         }
       }
       p.ackLaunch = Math.max(0, (p.ackLaunch || 0) - DT);
@@ -1018,6 +1562,7 @@ export class World {
         // Am Boden: reparieren und schnell aufmunitionieren; W = Start
         if (p.landed) {
           p.hp = Math.min(def.hp, p.hp + def.hp * 0.15 * DT);
+          if (def.fuel) p.b.fuel = Math.min(def.fuel, p.b.fuel + def.fuel * 0.15 * DT);
           for (const w of p.weapons) {
             const st = p.ws_[w];
             if (st.max !== undefined) st.rel += DT * 5;
@@ -1059,6 +1604,7 @@ export class World {
             r.done = true;
             this.events.push(["rescue", r.x, r.y]);
             this.addMoney(p, ECONOMY.rescue, "Schiffbrüchige geborgen");
+            this.stat(p, "rescues");
           }
         }
       }
@@ -1066,7 +1612,8 @@ export class World {
     this.rafts = this.rafts.filter((r) => !r.done && this.tick - r.t < RAFT_LIFE * TICK_RATE);
 
     // Schiffe kollidieren (Luftfahrzeuge fliegen darüber)
-    const ships = list.filter((p) => BOATS[p.type].kind === "ship");
+    // Getauchte U-Boote tauchen unter Schiffen hindurch
+    const ships = list.filter((p) => this.players.has(p.id) && (BOATS[p.type].kind === "ship" || (isSub(BOATS[p.type]) && (p.b.z || 0) > -12)));
     for (let i = 0; i < ships.length; i++) {
       for (let j = i + 1; j < ships.length; j++) {
         resolveBoatCollision(ships[i].b, BOATS[ships[i].type], ships[j].b, BOATS[ships[j].type], this.map);
@@ -1127,6 +1674,10 @@ export class World {
       p.landed ? 1 : 0,
       Math.round(p.b.z || 0),
       Math.round(p.b.zt || 0),
+      // Nachbrenner an, Dienstgrad, registriert
+      p.last.ab && BOATS[p.type].abSpeed && (p.last.th || 0) > 0.9 && p.b.fuel > 0 ? 1 : 0,
+      p.rank || 0,
+      p.reg ? 1 : 0,
     ];
     const rows = new Map(alive.map((p) => [p.id, row(p)]));
     const ev = this.events.map((e) => e.map((v) => (typeof v === "number" ? r(v, 10) : v)));
@@ -1138,9 +1689,10 @@ export class World {
       if (!members.length) continue;
       // Nebel des Krieges: nur eigene und vom Team erfasste Fahrzeuge
       const snap = alive.filter((p) => p.team === team || this.det[team].has(p.id)).map((p) => rows.get(p.id));
+      // Torpedos hört nur Sonar, alles andere sieht Radar/Sicht
       const near = (q) => {
         if (q.team === team) return true;
-        for (const s of this.sources[team]) if (Math.hypot(q.x - s.x, q.y - s.y) < s.r) return true;
+        for (const s of this.sources[team]) if (Math.hypot(q.x - s.x, q.y - s.y) < (q.k === "torp" ? s.sr : s.r)) return true;
         return false;
       };
       const proj = this.projectiles.filter(near).map((q) => [q.id, q.type, r(q.x, 10), r(q.y, 10), r(q.h), Math.round(q.z || 0)]);
@@ -1165,6 +1717,7 @@ export class World {
           e: ev,
           rf: rafts,
           fr,
+          env: this.envRow(),
           mk: marked,
           me: {
             w,
@@ -1179,6 +1732,9 @@ export class World {
             jam: this.jammedAt(p.b.x, p.b.y, p.team) ? 1 : 0,
             ...this.threats(p),
             $: p.acct ? p.acct.money : 0,
+            xp: p.acct ? p.acct.xp : 0,
+            fu: def.fuel ? Math.round((p.b.fuel / def.fuel) * 1000) / 1000 : undefined,
+            so: Math.round(sonarRange(def, p.b, this.wxF)),
             own: p.acct ? p.acct.owned : START_SHIP,
           },
         });
@@ -1191,7 +1747,8 @@ export class World {
     const owner = this.players.get(q.owner);
     const W = WEAPONS[q.w];
     // Störung: gelenkte Flugkörper in der Nähe eines gegnerischen Störers können ihr Ziel verlieren
-    if ((q.k === "ssm" || q.k === "agm" || q.k === "sam") && (q.target || q.air) && this.jammedAt(q.x, q.y, q.team, "lockRadius")) {
+    const radarAam = q.k === "aam" && !W.ir;
+    if ((q.k === "ssm" || q.k === "agm" || q.k === "sam" || radarAam) && (q.target || q.air) && this.jammedAt(q.x, q.y, q.team, "lockRadius")) {
       if (Math.random() < WEAPONS.jammer.breakChance) {
         q.target = 0;
         q.air = 0;
@@ -1201,6 +1758,59 @@ export class World {
     }
     if (q.jamUntil && this.tick < q.jamUntil && q.k !== "arm") {
       // gestört: fliegt geradeaus weiter
+    } else if (q.k === "aam") {
+      q.v = Math.min(W.speed, q.v + 260 * DT);
+      let t = q.air ? this.players.get(q.air) : null;
+      if (t && (t.landed || (W.ir && this.flaresOn(t) && Math.random() < 0.2))) t = null;
+      if (!t && q.air) q.air = 0;
+      if (!t && q.tx === null) {
+        t = this.seekAir(q, q.h, W.seekerRange, W.seekerCone);
+        if (t) q.air = t.id;
+      }
+      if (t) {
+        const g = this.leadPoint(q, t.b);
+        this.turnTowards(q, g.x, g.y, W.turn);
+      } else if (q.tx !== null) {
+        if (Math.hypot(q.tx - q.x, q.ty - q.y) < 200) q.tx = q.ty = null;
+        else this.turnTowards(q, q.tx, q.ty, W.turn);
+      }
+    } else if (q.k === "torp") {
+      q.v = Math.min(W.speed, q.v + 8 * DT);
+      let goal = null;
+      if (q.target) {
+        const t = this.players.get(q.target);
+        if (t) goal = this.leadPoint(q, t.b);
+        else q.target = 0;
+      }
+      if (!goal && q.tx !== null) {
+        if (Math.hypot(q.tx - q.x, q.ty - q.y) < 120) q.tx = q.ty = null;
+        else goal = { x: q.tx, y: q.ty };
+      }
+      if (!goal && q.tx === null && !q.target && !q.decoy) {
+        const t = this.seekNaval(q, W.seekerRange, W.seekerCone);
+        if (t) {
+          q.target = t.id;
+          goal = this.leadPoint(q, t.b);
+        }
+      }
+      if (goal) this.turnTowards(q, goal.x, goal.y, W.turn);
+      // Tiefe: auf die Tiefe des Ziels (U-Boot) oder 20 m
+      const tz = q.target ? Math.min(-8, this.players.get(q.target)?.b.z ?? -20) : -20;
+      q.z += clamp(tz - q.z, -6 * DT, 6 * DT);
+    } else if (q.k === "bomb") {
+      // Lenkbombe: fällt (verstärkte Schwerkraft), gleitet zum Ziel
+      const g = 29;
+      q.vz += g * DT;
+      q.z -= q.vz * DT;
+      const t = q.target ? this.players.get(q.target) : null;
+      const goal = t ? t.b : q.tx !== null ? { x: q.tx, y: q.ty } : null;
+      if (goal) {
+        this.turnTowards(q, goal.x, goal.y, W.turn * 2);
+        // Gleitsteuerung: Vorwärtsfahrt so anpassen, dass die Bombe beim Aufschlag am Ziel ist
+        const tImp = (-q.vz + Math.sqrt(q.vz * q.vz + 2 * g * Math.max(0, q.z))) / g;
+        const want = clamp(Math.hypot(goal.x - q.x, goal.y - q.y) / Math.max(0.3, tImp), 0, 260);
+        q.v += clamp(want - q.v, -40 * DT, 25 * DT);
+      }
     } else if (q.k === "ssm" || q.k === "agm") {
       q.v = Math.min(W.speed, q.v + (q.k === "ssm" ? 110 : 160) * DT);
       let goal = null;
@@ -1249,7 +1859,7 @@ export class World {
       if (q.target) tgt = this.projectiles.find((o) => o.id === q.target && !o.dead) || null;
       else if (q.air) {
         const h = this.players.get(q.air);
-        tgt = h && h.abT <= 0 ? h.b : h && BOATS[h.type].kind === "drone" ? h.b : null;
+        tgt = h && !this.flaresOn(h) && !h.landed ? h.b : null;
         if (!tgt) q.air = 0;
       }
       if (!tgt) {
@@ -1257,7 +1867,7 @@ export class World {
         q.air = 0;
         let bestD = W.seekerRange;
         for (const o of this.projectiles) {
-          if (!INTERCEPTABLE.has(o.type) || o.team === q.team || o.dead || o.z > W.ceiling) continue;
+          if (W.airOnly || !INTERCEPTABLE.has(o.type) || o.team === q.team || o.dead || o.z > W.ceiling) continue;
           const d = Math.hypot(o.x - q.x, o.y - q.y);
           if (d < bestD) {
             bestD = d;
@@ -1267,7 +1877,7 @@ export class World {
         }
         for (const p of this.players.values()) {
           const pd = BOATS[p.type];
-          if (p.team === q.team || !isAir(pd) || (pd.kind === "heli" && p.abT > 0) || (p.b.z || 0) > W.ceiling || p.landed) continue;
+          if (p.team === q.team || !isAir(pd) || this.flaresOn(p) || (p.b.z || 0) > W.ceiling || p.landed) continue;
           const d = Math.hypot(p.b.x - q.x, p.b.y - q.y);
           if (d < bestD) {
             bestD = d;
@@ -1299,8 +1909,8 @@ export class World {
     }
     // Flugabwehr fliegt eine schräge Bahn: Anteil Steigen/Vorwärts nach Höhen- und Seitenabstand
     let hFactor = 1;
-    if (q.k === "sam") {
-      let tz = ALTITUDE.seaSkim;
+    if (q.k === "sam" || q.k === "aam") {
+      let tz = q.k === "aam" ? q.z : ALTITUDE.seaSkim;
       let tx = q.tx ?? q.x;
       let ty = q.ty ?? q.y;
       if (q.air) {
@@ -1343,6 +1953,53 @@ export class World {
       }
     }
 
+    // Luft-Luft-Treffer
+    if (q.k === "aam" && q.air) {
+      const h = this.players.get(q.air);
+      if (h && segDist(h.b.x, h.b.y, px, py, q.x, q.y) < BOATS[h.type].hitRadius + 4 && Math.abs((h.b.z || 0) - q.z) < 60) {
+        this.events.push(["intercept", h.b.x, h.b.y]);
+        this.damage(h, W.damage, owner);
+        return false;
+      }
+    }
+    // Torpedos: Schiffe und U-Boote (in passender Tiefe)
+    if (q.k === "torp") {
+      for (const p of this.players.values()) {
+        if (p.team === q.team) continue;
+        const def = BOATS[p.type];
+        if (def.kind !== "ship" && !isSub(def)) continue;
+        if (isSub(def) && Math.abs((p.b.z || 0) - q.z) > 80) continue;
+        if (Math.abs(p.b.x - q.x) > def.length + step || Math.abs(p.b.y - q.y) > def.length + step) continue;
+        for (const cc of boatCircles(p.b, def)) {
+          if (segDist(cc.x, cc.y, px, py, q.x, q.y) < cc.r + 1) {
+            this.events.push(["torphit", q.x, q.y]);
+            this.damage(p, W.damage, owner);
+            return false;
+          }
+        }
+      }
+      if (isOnLand(this.map, q.x, q.y)) {
+        this.events.push(["hit", q.x, q.y]);
+        return false;
+      }
+    }
+    // Lenkbombe: Einschlag auf dem Wasser/an Land, Wirkung im Umkreis
+    if (q.k === "bomb" && q.z <= 0) {
+      let hitAny = false;
+      for (const p of this.players.values()) {
+        if (p.team === q.team) continue;
+        const def = BOATS[p.type];
+        if (def.kind !== "ship" && !(isSub(def) && (p.b.z || 0) > DEPTH.surface)) continue;
+        let d = Infinity;
+        for (const cc of boatCircles(p.b, def)) d = Math.min(d, Math.hypot(cc.x - q.x, cc.y - q.y) - cc.r);
+        if (d < W.radius) {
+          this.damage(p, W.damage * (d < 5 ? 1 : 0.6), owner);
+          hitAny = true;
+        }
+      }
+      this.events.push([hitAny || isOnLand(this.map, q.x, q.y) ? "bighit" : "splash", q.x, q.y]);
+      return false;
+    }
     // ARM gegen einen Störsender in der Luft
     if (q.k === "arm" && q.target) {
       const t = this.players.get(q.target);
@@ -1353,7 +2010,7 @@ export class World {
       }
     }
     // Rohrwaffen und MG treffen auch Luftfahrzeuge
-    if (q.k === "gun" || q.k === "mg") {
+    if (q.k === "gun" || q.k === "mg" || q.k === "jgun") {
       for (const p of this.players.values()) {
         const def = BOATS[p.type];
         if (p.team === q.team || !isAir(def) || p.landed) continue;
@@ -1362,18 +2019,19 @@ export class World {
         if (dz > (W.ceiling || 1000)) continue;
         if (segDist(p.b.x, p.b.y, px, py, q.x, q.y) < def.hitRadius) {
           this.events.push(["hit", q.x, q.y]);
-          this.damage(p, q.k === "gun" ? W.damage * 1.5 : W.heliDamage, owner);
+          this.damage(p, q.k === "gun" ? W.damage * 1.5 : q.k === "jgun" ? W.airDamage : W.heliDamage, owner);
           return false;
         }
       }
     }
 
     // Treffer an Schiffen (Flugabwehr fliegt über Schiffe hinweg, wenn sie ein Luftziel jagt)
-    if (!(q.k === "sam" && (q.target || q.air)) && ((q.z || 0) < ALTITUDE.hitShip || q.k === "gun" || q.k === "mg")) {
+    if (!(q.k === "sam" && (q.target || q.air)) && q.k !== "aam" && q.k !== "torp" && q.k !== "bomb" && ((q.z || 0) < ALTITUDE.hitShip || q.k === "gun" || q.k === "mg" || (q.k === "jgun" && q.z < 800))) {
       for (const p of this.players.values()) {
         if (p.team === q.team) continue;
         const def = BOATS[p.type];
-        if (def.kind !== "ship") continue;
+        // Überwasser: Schiffe und aufgetauchte U-Boote
+        if (def.kind !== "ship" && !(isSub(def) && (p.b.z || 0) > DEPTH.surface)) continue;
         if (Math.abs(p.b.x - q.x) > def.length + step || Math.abs(p.b.y - q.y) > def.length + step) continue;
         for (const cc of boatCircles(p.b, def)) {
           if (segDist(cc.x, cc.y, px, py, q.x, q.y) < cc.r + 0.5) {
@@ -1386,13 +2044,13 @@ export class World {
       }
     }
 
-    if ((q.k === "gun" || q.k === "mg" || q.k === "ssm" || q.k === "rkt") && isOnLand(this.map, q.x, q.y)) {
-      this.events.push([q.k === "gun" || q.k === "mg" ? "dirt" : q.k === "rkt" ? "hit" : "bighit", q.x, q.y]);
+    if ((q.k === "gun" || q.k === "mg" || q.k === "jgun" || q.k === "ssm" || q.k === "rkt") && (q.k !== "jgun" || q.z < 50) && isOnLand(this.map, q.x, q.y)) {
+      this.events.push([q.k === "gun" || q.k === "mg" || q.k === "jgun" ? "dirt" : q.k === "rkt" ? "hit" : "bighit", q.x, q.y]);
       return false;
     }
     const half = WORLD_SIZE / 2;
     if (q.dist >= q.range || Math.abs(q.x) > half || Math.abs(q.y) > half) {
-      this.events.push([q.k === "sam" ? "air" : q.k === "mg" ? "spray" : "splash", q.x, q.y]);
+      this.events.push([q.k === "sam" || q.k === "aam" ? "air" : q.k === "mg" || q.k === "jgun" ? "spray" : q.k === "torp" ? "torpend" : "splash", q.x, q.y]);
       return false;
     }
     return true;
@@ -1409,12 +2067,44 @@ export class World {
     q.h = wrapAngle(q.h + clamp(wrapAngle(want - q.h), -rate * DT, rate * DT));
   }
 
-  // Suchkopf für Seezielflugkörper: nur Schiffe
+  // Suchkopf für Luft-Luft: nächstes gegnerisches Luftfahrzeug im Kegel um Richtung dir
+  seekAir(q, dir, range, cone) {
+    let best = null;
+    let bestD = range;
+    for (const p of this.players.values()) {
+      if (p.team === q.team || !isAir(BOATS[p.type]) || p.landed) continue;
+      const d = Math.hypot(p.b.x - q.x, p.b.y - q.y);
+      if (d > bestD) continue;
+      if (Math.abs(wrapAngle(Math.atan2(p.b.y - q.y, p.b.x - q.x) - dir)) > cone) continue;
+      bestD = d;
+      best = p;
+    }
+    return best;
+  }
+
+  // Suchkopf für Torpedos: Schiffe und U-Boote
+  seekNaval(q, range, cone) {
+    let best = null;
+    let bestD = range;
+    for (const p of this.players.values()) {
+      const k = BOATS[p.type].kind;
+      if (p.team === q.team || (k !== "ship" && k !== "sub")) continue;
+      const d = Math.hypot(p.b.x - q.x, p.b.y - q.y);
+      if (d > bestD) continue;
+      if (Math.abs(wrapAngle(Math.atan2(p.b.y - q.y, p.b.x - q.x) - q.h)) > cone) continue;
+      bestD = d;
+      best = p;
+    }
+    return best;
+  }
+
+  // Suchkopf für Seezielflugkörper: Schiffe und aufgetauchte U-Boote
   seekShip(q, range, cone) {
     let best = null;
     let bestD = range;
     for (const p of this.players.values()) {
-      if (p.team === q.team || BOATS[p.type].kind !== "ship") continue;
+      const pd = BOATS[p.type];
+      if (p.team === q.team || !(pd.kind === "ship" || (isSub(pd) && (p.b.z || 0) > DEPTH.surface))) continue;
       const d = Math.hypot(p.b.x - q.x, p.b.y - q.y);
       if (d > bestD) continue;
       const off = Math.abs(wrapAngle(Math.atan2(p.b.y - q.y, p.b.x - q.x) - q.h));
@@ -1444,10 +2134,13 @@ export class World {
     return best;
   }
 
-  damage(p, dmg, attacker) {
-    if (p.protect > 0 || p.hp <= 0) return;
-    if (inRect(harborRect(teamBase(p.team)), p.b.x, p.b.y)) return; // sicherer Hafen
-    if (inRect(airfieldRect(p.team), p.b.x, p.b.y)) return; // eigenes Flugfeld
+  damage(p, dmg, attacker, force = false) {
+    if (p.hp <= 0) return;
+    if (!force) {
+      if (p.protect > 0) return;
+      if (inRect(harborRect(teamBase(p.team)), p.b.x, p.b.y)) return; // sicherer Hafen
+      if (inRect(airfieldRect(p.team), p.b.x, p.b.y)) return; // eigenes Flugfeld
+    }
     const real = Math.min(dmg, p.hp);
     p.hp -= dmg;
     if (attacker && attacker !== p && attacker.team !== p.team) {
@@ -1474,8 +2167,10 @@ export class World {
     }
     const by = attacker && attacker !== p ? attacker : null;
     const bounty = ECONOMY.bounty(def);
+    this.stat(p, "deaths");
     if (by) {
       by.kills++;
+      this.stat(by, "kills");
       this.addMoney(by, bounty, `${air ? "Abschuss" : "Versenkt"}: ${p.name}`);
     }
     for (const [id, d] of p.damagers) {

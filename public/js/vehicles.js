@@ -6,6 +6,15 @@ import { drawBlackhawk, drawBlackhawkShadow, fuselagePath } from "./heli.js";
 import { drawK130, drawF124, drawCyclone, drawLCS, drawBurke, EXHAUSTS, hullPath, lcsOutline } from "./warships.js";
 import { drawNH90, drawNH90Shadow, drawHeron, drawReaper, drawDroneShadow, nhPath } from "./aircraft.js";
 import { finish, pathFrom } from "./shade.js";
+import { drawJet, drawJetShadow } from "./jets.js";
+import { drawSub } from "./subs.js";
+
+// Außenlasten-Satz eines Jets aus seiner Bewaffnung (Luft-Boden → „strike“)
+const STRIKE = new Set(["taurus", "gbu12", "marte", "harm", "jsm"]);
+function jetStores(type, weapons) {
+  if (type === "f35") return "clean"; // Waffenschacht
+  return weapons && weapons.some((w) => STRIKE.has(w)) ? "strike" : "air";
+}
 
 // Umrisse für Licht und Gebrauchsspuren (einmal erzeugt)
 const OUTLINES = {
@@ -34,6 +43,23 @@ function shadeVehicle(ctx, type, def, heading) {
  */
 export function drawVehicle(ctx, type, anim) {
   const def = BOATS[type];
+  if (def.kind === "jet") {
+    const weapons = anim.weapons || (anim.pod ? [...def.weapons.slice(0, -1), anim.pod] : def.weapons);
+    const v = anim.v ?? def.maxSpeed * 0.6;
+    drawJet(ctx, type, {
+      ...anim,
+      stores: jetStores(type, weapons),
+      ab: anim.ab ? 1 : 0,
+      nozzle: def.vtol ? clamp01(1 - v / 70) : 0,
+      fan: type === "f35" ? clamp01(1 - v / 80) : 0,
+      variant: "B",
+    });
+    return;
+  }
+  if (def.kind === "sub") {
+    drawSub(ctx, type, anim);
+    return;
+  }
   // Bewaffnung: eigene (vom Server) oder Standard; bei Luftfahrzeugen bestimmt der letzte Platz die Außenlast
   const weapons = anim.weapons || (anim.pod ? [...def.weapons.slice(0, -1), anim.pod] : def.weapons);
   // Seezielflugkörper-Zellen (leer = abgefeuert) aus dem Waffenstatus
@@ -85,7 +111,10 @@ function drawBody(ctx, type, def, a) {
   }
 }
 
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
 export function drawAirShadow(ctx, type) {
+  if (BOATS[type].kind === "jet") return drawJetShadow(ctx, type, 0.3);
   if (type === "blackhawk") drawBlackhawkShadow(ctx);
   else if (type === "nh90") drawNH90Shadow(ctx);
   else drawDroneShadow(ctx, type);
