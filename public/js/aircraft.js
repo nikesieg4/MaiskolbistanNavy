@@ -87,6 +87,13 @@ export function drawNH90(ctx, a) {
     ctx.fillStyle = NH_DARK;
     rr(ctx, -1.8, side * 1.6 - (side < 0 ? 1.1 : 0), 3.6, 1.1, 0.5);
     ctx.fill();
+    if (a.pod && a.pod !== "marte") {
+      for (let i = 0; i < 2; i++) {
+        const idx = side < 0 ? i * 2 : i * 2 + 1;
+        drawPod(ctx, a.pod, 0, side * (2.5 + i * 0.6), a.pod === "rkt70" ? (n ?? 14) > 0 : idx < (n ?? 4), t);
+      }
+      continue;
+    }
     for (let i = 0; i < 2; i++) {
       const idx = side < 0 ? i * 2 : i * 2 + 1;
       const y = side * (2.4 + i * 0.55);
@@ -250,8 +257,13 @@ export function drawHeron(ctx, a) {
   ctx.strokeStyle = "rgba(0,0,0,0.25)";
   ctx.lineWidth = 0.05;
   ctx.stroke();
-  armUnder(ctx, 0.3, -6, n > 0);
-  armUnder(ctx, 0.3, 6, n > 1);
+  if (a.pod === "jammer") {
+    drawPod(ctx, "jammer", 0.3, -6, a.jamOn, t);
+    drawPod(ctx, "jammer", 0.3, 6, a.jamOn, t);
+  } else {
+    armUnder(ctx, 0.3, -6, n > 0);
+    armUnder(ctx, 0.3, 6, n > 1);
+  }
   // Rumpf mit Satellitenbuckel
   const g = ctx.createLinearGradient(0, -0.9, 0, 0.9);
   g.addColorStop(0, "#e2e6e8");
@@ -307,8 +319,21 @@ export function drawReaper(ctx, a) {
   ctx.strokeStyle = "rgba(0,0,0,0.3)";
   ctx.lineWidth = 0.05;
   ctx.stroke();
-  armUnder(ctx, 0.4, -5, n > 0);
-  armUnder(ctx, 0.4, 5, n > 1);
+  if (a.pod === "jammer") {
+    drawPod(ctx, "jammer", 0.4, -5, a.jamOn, t);
+    drawPod(ctx, "jammer", 0.4, 5, a.jamOn, t);
+  } else if (a.pod === "hellfire") {
+    for (const y of [-6.2, -5.4, 5.4, 6.2]) {
+      const idx = y < 0 ? (y < -6 ? 0 : 2) : y > 6 ? 1 : 3;
+      if (idx < (n ?? 8)) {
+        ctx.fillStyle = "#c9c9b8";
+        ctx.fillRect(-1.2, y - 0.15, 2.8, 0.3);
+      }
+    }
+  } else {
+    armUnder(ctx, 0.4, -5, n > 0);
+    armUnder(ctx, 0.4, 5, n > 1);
+  }
   // Rumpf: schlank, bauchige Nase
   const g = ctx.createLinearGradient(0, -0.7, 0, 0.7);
   g.addColorStop(0, "#b4babe");
@@ -352,4 +377,46 @@ export function drawReaper(ctx, a) {
     circle(ctx, 0.2, 9.8, 0.22);
     ctx.fill();
   }
+}
+
+// ---------- Hangar-Bewaffnung (Außenlasten) ----------
+// kind: "jammer" Störpod, "stinger_aa" Luft-Luft, "rkt70" Raketenbehälter, "hellfire" Schienen mit 2 Flugkörpern
+export function drawPod(ctx, kind, x, y, present = true, t = 0) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (kind === "jammer") {
+    ctx.fillStyle = "#c4c9c2";
+    ctx.beginPath();
+    ctx.roundRect(-2.4, -0.38, 4.8, 0.76, 0.38);
+    ctx.fill();
+    ctx.fillStyle = "#6f756e";
+    ctx.fillRect(-0.3, -0.38, 0.6, 0.76);
+    // Antennenfenster, blinkt bei Betrieb
+    ctx.fillStyle = present ? `rgba(255,90,70,${0.5 + 0.5 * Math.sin(t * 20)})` : "#2b2b2b";
+    ctx.beginPath();
+    ctx.arc(2.1, 0, 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === "rkt70") {
+    ctx.fillStyle = "#4d544b";
+    ctx.beginPath();
+    ctx.roundRect(-1.4, -0.5, 2.8, 1.0, 0.5);
+    ctx.fill();
+    ctx.fillStyle = present ? "#1b1d1b" : "#3a3f39";
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j += 2) {
+      ctx.beginPath();
+      ctx.arc(1.3, i * 0.25 + j * 0.06, 0.07, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (kind === "stinger_aa") {
+    if (present) {
+      ctx.fillStyle = "#d9dccf";
+      ctx.fillRect(-1.6, -0.12, 3.2, 0.24);
+      ctx.fillStyle = "#3b3f38";
+      ctx.fillRect(1.4, -0.12, 0.25, 0.24);
+    } else {
+      ctx.fillStyle = "rgba(30,30,30,0.6)";
+      ctx.fillRect(-0.6, -0.08, 1.2, 0.16);
+    }
+  }
+  ctx.restore();
 }

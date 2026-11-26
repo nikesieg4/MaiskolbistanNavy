@@ -1,3 +1,4 @@
+import { drawPod } from "./aircraft.js";
 // UH-60 Black Hawk – Draufsicht in Metern, Nase = +x, Steuerbord = +y.
 // Bewegliche Teile: Hauptrotor (4 Blätter), Heckrotor, Hellfire-Starter (leeren sich beim Feuern),
 // Türschütze schwenkt zum Ziel, Positionslichter blinken.
@@ -62,6 +63,14 @@ export function drawBlackhawk(ctx, anim) {
     ctx.fillStyle = "#2d332c";
     rr(ctx, -2.4, side * 3.4 - 0.95, 3.2, 1.9, 0.2);
     ctx.fill();
+    if (anim.pod && anim.pod !== "hellfire") {
+      // andere Hangar-Bewaffnung: Stinger bzw. Raketenbehälter
+      for (let i = 0; i < 2; i++) {
+        const idx = side < 0 ? i * 2 : i * 2 + 1;
+        drawPod(ctx, anim.pod, -0.8, side * 3.4 + (i - 0.5) * 0.9, anim.pod === "rkt70" ? hf > 0 : idx < hf, t);
+      }
+      continue;
+    }
     // 4 Flugkörper pro Seite (zwei Reihen à zwei, von oben versetzt sichtbar)
     for (let i = 0; i < 4; i++) {
       // Reihenfolge des Abfeuerns: abwechselnd links/rechts

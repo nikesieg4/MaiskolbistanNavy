@@ -1,7 +1,7 @@
 // Marinebasen der beiden Teams: Hafenbecken, Molen, Piers, Hauptquartier, Flaggenmast,
 // Radarturm, Hafenkräne, Tanklager und drei Werften – mit beweglichen Teilen.
 // Gezeichnet in lokalen Koordinaten (x = Abstand vom Kartenrand Richtung See), gespiegelt für Osten.
-import { BASE_LAYOUT, TEAMS, teamBase } from "../shared/sim.js";
+import { BASE_LAYOUT, TEAMS, teamBase, AIRFIELD } from "../shared/sim.js";
 import { drawGepard } from "./gepard.js";
 
 const L = BASE_LAYOUT;
@@ -102,7 +102,143 @@ function label(ctx, base, lx, ly, text, size, color, alpha = 0.85) {
   ctx.restore();
 }
 
+// ---------- Flugfeld (lokal, landeinwärts hinter der Basis) ----------
+function drawAirfield(ctx, base, t) {
+  const A = AIRFIELD;
+  const [x0, x1, y0, y1] = A.area;
+  // Gelände mit Zaun
+  ctx.fillStyle = "rgba(120,150,90,0.35)";
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.strokeStyle = "rgba(60,60,60,0.6)";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.setLineDash([]);
+  // Zufahrt zur Basis
+  ctx.fillStyle = "#6b6e6c";
+  ctx.fillRect(x1, -20, 190, 12);
+  // Startbahn
+  const R = A.runway;
+  ctx.fillStyle = "#3b4044";
+  ctx.fillRect(R.x - R.w / 2 - 6, R.y0 - 30, R.w + 12, R.y1 - R.y0 + 60);
+  ctx.fillStyle = "#454a4e";
+  ctx.fillRect(R.x - R.w / 2, R.y0, R.w, R.y1 - R.y0);
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  // Mittellinie
+  for (let y = R.y0 + 60; y < R.y1 - 60; y += 40) ctx.fillRect(R.x - 0.8, y, 1.6, 22);
+  // Schwellen (Klaviertasten) und Aufsetzzonen
+  for (const yEnd of [R.y0 + 6, R.y1 - 26]) {
+    for (let i = -4; i <= 4; i++) if (i !== 0) ctx.fillRect(R.x + i * 4.6 - 1.2, yEnd, 2.4, 20);
+  }
+  for (const yz of [R.y0 + 120, R.y1 - 140]) {
+    ctx.fillRect(R.x - 14, yz, 5, 20);
+    ctx.fillRect(R.x + 9, yz, 5, 20);
+  }
+  // Randbefeuerung (blinkt leicht)
+  const on = 0.6 + 0.4 * Math.sin(t * 3);
+  ctx.fillStyle = `rgba(255,240,180,${on})`;
+  for (let y = R.y0; y <= R.y1; y += 60) {
+    ctx.fillRect(R.x - R.w / 2 - 3, y, 2, 2);
+    ctx.fillRect(R.x + R.w / 2 + 1, y, 2, 2);
+  }
+  ctx.fillStyle = `rgba(80,255,120,${on})`;
+  for (let i = -5; i <= 5; i++) ctx.fillRect(R.x + i * 4.2 - 1, R.y1 + 8, 2, 2);
+  ctx.fillStyle = `rgba(255,70,60,${on})`;
+  for (let i = -5; i <= 5; i++) ctx.fillRect(R.x + i * 4.2 - 1, R.y0 - 10, 2, 2);
+  // Rollwege
+  ctx.fillStyle = "#50565a";
+  ctx.fillRect(R.x + R.w / 2, R.y1 - 360, 140, 22);
+  ctx.fillRect(R.x + R.w / 2, R.y0 + 140, 140, 22);
+  ctx.fillRect(-382, R.y0 + 140, 22, R.y1 - R.y0 - 280 + 22);
+  ctx.strokeStyle = "rgba(240,200,60,0.8)";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(-371, R.y0 + 150);
+  ctx.lineTo(-371, R.y1 - 340);
+  ctx.stroke();
+  // Vorfeld mit Abstellpositionen
+  ctx.fillStyle = "#8f9290";
+  ctx.fillRect(-370, 470, 140, 460);
+  ctx.strokeStyle = "rgba(240,200,60,0.8)";
+  ctx.lineWidth = 0.8;
+  for (const a of A.apron) {
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, 16, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Hangars (Bogendach)
+  for (const h of A.hangars) {
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.fillRect(h.x - h.w / 2 + 4, h.y - h.h / 2 + 5, h.w, h.h);
+    const g = ctx.createLinearGradient(h.x - h.w / 2, 0, h.x + h.w / 2, 0);
+    g.addColorStop(0, "#8b949a");
+    g.addColorStop(0.5, "#c3cacf");
+    g.addColorStop(1, "#7d868c");
+    ctx.fillStyle = g;
+    ctx.fillRect(h.x - h.w / 2, h.y - h.h / 2, h.w, h.h);
+    ctx.strokeStyle = "rgba(0,0,0,0.18)";
+    ctx.lineWidth = 1;
+    for (let y = h.y - h.h / 2 + 10; y < h.y + h.h / 2; y += 10) {
+      ctx.beginPath();
+      ctx.moveTo(h.x - h.w / 2, y);
+      ctx.lineTo(h.x + h.w / 2, y);
+      ctx.stroke();
+    }
+    // Tor zur Bahn hin
+    ctx.fillStyle = "#3f474d";
+    ctx.fillRect(h.x - h.w / 2 - 2, h.y - h.h / 2 + 15, 4, h.h - 30);
+    ctx.fillStyle = "#50565a";
+    ctx.fillRect(-370, h.y - 10, h.x - h.w / 2 + 370, 20);
+  }
+  // Tower mit drehendem Radar
+  const T = A.tower;
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(T.x - 14 + 4, T.y - 14 + 5, 28, 28);
+  ctx.fillStyle = "#d9d4c7";
+  ctx.fillRect(T.x - 14, T.y - 14, 28, 28);
+  ctx.fillStyle = "#24445e";
+  ctx.fillRect(T.x - 11, T.y - 11, 22, 22);
+  ctx.fillStyle = "#b9b4a6";
+  ctx.fillRect(T.x - 7, T.y - 7, 14, 14);
+  ctx.save();
+  ctx.translate(T.x, T.y);
+  ctx.rotate(t * 2.2);
+  ctx.fillStyle = "#eef1f2";
+  ctx.fillRect(-2, -13, 4, 26);
+  ctx.restore();
+  // Hubschrauberlandeplätze
+  for (const hp of A.helipads) {
+    ctx.fillStyle = "#5d605e";
+    ctx.beginPath();
+    ctx.arc(hp.x, hp.y, 24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(240,200,60,0.9)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(hp.x, hp.y, 19, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#f2f2f2";
+    ctx.fillRect(hp.x - 8, hp.y - 9, 3, 18);
+    ctx.fillRect(hp.x + 5, hp.y - 9, 3, 18);
+    ctx.fillRect(hp.x - 8, hp.y - 1.5, 16, 3);
+  }
+  // Windsack (weht)
+  ctx.save();
+  ctx.translate(R.x - 60, R.y0 + 40);
+  ctx.fillStyle = "#555";
+  ctx.beginPath();
+  ctx.arc(0, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.rotate(0.9 + Math.sin(t * 0.7) * 0.25);
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = i % 2 ? "#f2f2f2" : "#e8551e";
+    ctx.fillRect(i * 3.4, -1.6 + i * 0.15, 3.4, 3.2 - i * 0.3);
+  }
+  ctx.restore();
+}
+
 function drawBaseLocal(ctx, base, t) {
+  drawAirfield(ctx, base, t);
   const team = TEAMS[base.team];
   const [hx0, hx1, hy0, hy1] = L.harbor;
 
@@ -435,7 +571,7 @@ function drawBaseLocal(ctx, base, t) {
 export function drawBases(ctx, view, t) {
   for (const team of [0, 1]) {
     const base = teamBase(team);
-    const xNear = base.edge;
+    const xNear = base.edge - base.dir * 820; // inklusive Flugfeld
     const xFar = base.edge + base.dir * 720;
     if (Math.max(xNear, xFar) < view.x0 || Math.min(xNear, xFar) > view.x1) continue;
     ctx.save();
@@ -450,6 +586,8 @@ export function drawBases(ctx, view, t) {
     label(ctx, base, 200, 745, "WERFT 2 · FREGATTEN (in Planung)", 9, "#1e2326", 0.85);
     label(ctx, base, 145, 1150, "WERFT 3 · U-BOOTE (in Planung)", 9, "#e6e9eb", 0.85);
     label(ctx, base, 505, -660, "SICHERER HAFEN", 12, tm.color, 0.55);
+    label(ctx, base, -300, -960, "FLUGFELD", 16, "#1e2326", 0.75);
+    label(ctx, base, -300, -935, "Landen: langsam über die Bahn (Drohne) · schweben (Hubschrauber)", 7, "#1e2326", 0.7);
   }
 }
 
@@ -458,6 +596,10 @@ export function drawBasesMinimap(g, toM, s) {
   for (const team of [0, 1]) {
     const base = teamBase(team);
     const tm = TEAMS[team];
+    // Startbahn des Flugfelds
+    const R = AIRFIELD.runway;
+    g.fillStyle = "#3b4044";
+    g.fillRect(toM(base.edge + base.dir * R.x) - 1.5, toM(R.y0), 3, (R.y1 - R.y0) * s);
     const lx = (x) => toM(base.edge + base.dir * x);
     g.fillStyle = "#a3a59f";
     const x0 = Math.min(lx(0), lx(L.landDepth));

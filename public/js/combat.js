@@ -346,7 +346,12 @@ export function drawProjectiles(ctx, projs, t, zoom) {
     ctx.save();
     ctx.translate(q.x, q.y);
     ctx.rotate(q.h);
-    if (q.type === PROJ.BULLET) {
+    if (q.type === PROJ.ROCKET) {
+      ctx.fillStyle = "rgba(255,190,90,0.9)";
+      ctx.fillRect(-4 * boost, -0.25 * boost, 2.4 * boost, 0.5 * boost);
+      ctx.fillStyle = "#e6e6e0";
+      ctx.fillRect(-1.6 * boost, -0.15 * boost, 2 * boost, 0.3 * boost);
+    } else if (q.type === PROJ.BULLET) {
       ctx.strokeStyle = "rgba(255,235,150,0.9)";
       ctx.lineWidth = 0.3 * boost;
       ctx.beginPath();

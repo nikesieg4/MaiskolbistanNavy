@@ -69,3 +69,16 @@ Object.assign(WEAPON_UI, {
   },
 });
 WEAPON_UI.harm = { ...WEAPON_UI.armiger, name: "AGM-88 HARM" };
+
+// Hangar-Bewaffnung
+WEAPON_UI.stinger_aa = { ...WEAPON_UI.ram, name: "Stinger", sub: "Luft-Luft zum Mauszeiger" };
+WEAPON_UI.rkt70 = {
+  name: "70-mm-Raketen",
+  sub: "ungelenkt zum Mauszeiger",
+  icon: svg('<rect x="6" y="6" width="22" height="12" rx="6" fill="#4d544b"/><circle cx="26" cy="9" r="1.2" fill="#111"/><circle cx="26" cy="12" r="1.2" fill="#111"/><circle cx="26" cy="15" r="1.2" fill="#111"/><rect x="30" y="11" width="12" height="2" fill="#ddd"/><path d="M42 10 L46 12 L42 14 Z" fill="#ffb347"/>'),
+};
+WEAPON_UI.jammer = {
+  name: "Störpod",
+  sub: "bereit (F)",
+  icon: svg('<rect x="8" y="9" width="26" height="6" rx="3" fill="#c4c9c2"/><circle cx="32" cy="12" r="1.6" fill="#ff5a46"/><path d="M36 6 Q41 12 36 18" stroke="#ff8a6a" stroke-width="1.5" fill="none"/><path d="M40 3 Q47 12 40 21" stroke="#ff8a6a" stroke-width="1.2" fill="none" opacity=".6"/>'),
+};

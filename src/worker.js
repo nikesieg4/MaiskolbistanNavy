@@ -37,6 +37,12 @@ import {
   harborRect,
   teamBase,
   inRect,
+  airfieldRect,
+  runwayRect,
+  runwayStart,
+  helipadSpawn,
+  apronSpot,
+  slotOptions,
 } from "../public/shared/sim.js";
 import ASSETS from "./assets.gen.js";
 
@@ -46,7 +52,7 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 7;
+const WORLD_VERSION = 8;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
 const RAFT_LIFE = 90; // s
 
@@ -116,6 +122,7 @@ export class World {
         const acct = {
           money: Math.max(0, Math.floor(+body.money || 0)),
           owned: (Array.isArray(body.owned) ? body.owned : []).filter((t) => BOATS[t]),
+          loadout: body.loadout && typeof body.loadout === "object" ? body.loadout : {},
         };
         for (const s of START_SHIP) if (!acct.owned.includes(s)) acct.owned.push(s);
         await this.state.storage.put(`a:${token}`, acct);
@@ -169,7 +176,7 @@ export class World {
     try {
       const r = await this.kontenStub().fetch(`https://konten/acct?token=${token}`);
       const data = await r.json();
-      a = { money: data.money | 0, owned: data.owned || [...START_SHIP], dirty: false };
+      a = { money: data.money | 0, owned: data.owned || [...START_SHIP], loadout: data.loadout || {}, dirty: false };
     } catch {
       a = { ...defaultAccount(), dirty: false };
     }
@@ -195,7 +202,7 @@ export class World {
         try {
           await this.kontenStub().fetch(`https://konten/acct?token=${token}`, {
             method: "POST",
-            body: JSON.stringify({ money: a.money, owned: a.owned }),
+            body: JSON.stringify({ money: a.money, owned: a.owned, loadout: a.loadout || {} }),
           });
         } catch {
           a.dirty = true;
@@ -318,6 +325,7 @@ export class World {
         player.token = token;
         player.acct = acct;
         player.carrierId = carrierId || 0;
+        this.resetLoadout(player); // jetzt mit der im Konto gespeicherten Hangar-Bewaffnung
         this.players.set(player.id, player);
         this.send(ws, {
           t: "welcome",
@@ -356,6 +364,8 @@ export class World {
         this.buy(player, msg.ship);
       } else if (msg.t === "switch") {
         this.switchShip(player, msg.ship);
+      } else if (msg.t === "loadout") {
+        this.setLoadout(player, msg.slot | 0, String(msg.w || ""));
       }
     });
 
@@ -378,6 +388,16 @@ export class World {
     const fallback = (note) => ({ type: start, spawn: this.spawnInHarbor(team, BOATS[start]), note });
     if (want === "drone") {
       return { type: DRONE_OF[team], spawn: droneSpawn(team) };
+    }
+    if (want === "heli:af") {
+      // Start vom Hubschrauberlandeplatz des Flugfelds
+      const heliType = team === 0 ? "nh90" : "blackhawk";
+      const others = [...this.players.values()];
+      for (let i = 0; i < 3; i++) {
+        const s = helipadSpawn(team, i);
+        if (!others.some((p) => Math.hypot(p.b.x - s.x, p.b.y - s.y) < 30)) return { type: heliType, spawn: s };
+      }
+      return { type: heliType, spawn: helipadSpawn(team, Math.floor(Math.random() * 3)) };
     }
     if (want.startsWith("heli")) {
       const wantedId = +want.split(":")[1] || 0;
@@ -451,16 +471,104 @@ export class World {
     p.abT = 0;
     p.abCd = 0;
     p.radarOn = true;
+    p.landed = null;
+    // Bewaffnung: Standard des Typs, Hangar-Auswahl aus dem Konto
+    p.weapons = [...def.weapons];
+    const saved = p.acct && p.acct.loadout && p.acct.loadout[p.type];
+    if (saved) {
+      for (const [i, w] of Object.entries(saved)) {
+        const opts = slotOptions(def, +i);
+        if (opts && opts.includes(w)) p.weapons[+i] = w;
+      }
+    }
     p.ws_ = {};
-    for (const w of def.weapons) {
+    for (const w of p.weapons) this.initWeapon(p, w);
+  }
+
+  initWeapon(p, w) {
+    const def = BOATS[p.type];
+    {
       const W = WEAPONS[w];
       if (W.kind === "ssm") p.ws_[w] = { cd: 0, cells: def.ssm.map(() => 0) };
       else if (W.kind === "gun" || W.kind === "mg") p.ws_[w] = { cd: 0 };
+      else if (W.kind === "jam") p.ws_[w] = { cd: 0, act: 0 };
       else {
         const max = (def.mags && def.mags[w]) || W.magazine || W.count;
         p.ws_[w] = { cd: 0, n: max, max, rel: 0, rail: 0 };
       }
     }
+  }
+
+  // Hangar: Bewaffnung eines Waffenplatzes ändern (nur gelandet)
+  setLoadout(p, slot, w) {
+    const def = BOATS[p.type];
+    const opts = slotOptions(def, slot);
+    if (!opts || !opts.includes(w)) return;
+    if (!p.landed) return this.send(p.ws, { t: "shop", ok: false, m: "Bewaffnung nur nach der Landung im Hangar." });
+    const old = p.weapons[slot];
+    if (old === w) return;
+    delete p.ws_[old];
+    p.weapons[slot] = w;
+    this.initWeapon(p, w);
+    if (p.acct) {
+      p.acct.loadout = p.acct.loadout || {};
+      p.acct.loadout[p.type] = { ...(p.acct.loadout[p.type] || {}), [slot]: w };
+      p.acct.dirty = true;
+    }
+    this.send(p.ws, { t: "shop", ok: true, m: `Neu bewaffnet: ${WEAPONS[w].label}` });
+  }
+
+  // Landung: Drohne langsam über der eigenen Bahn, Hubschrauber schwebend über Träger-Landepunkt oder Flugfeld
+  checkLanding(p) {
+    const def = BOATS[p.type];
+    if (p.landed || !isAir(def) || p.ackLaunch > 0) return;
+    if (def.kind === "drone") {
+      if (Math.abs(p.b.v) <= def.minSpeed + 4 && inRect(runwayRect(p.team), p.b.x, p.b.y)) {
+        const others = [...this.players.values()];
+        let spot = apronSpot(p.team, 0);
+        for (let i = 0; i < 4; i++) {
+          const s = apronSpot(p.team, i);
+          if (!others.some((o) => o !== p && o.landed && Math.hypot(o.b.x - s.x, o.b.y - s.y) < 20)) {
+            spot = s;
+            break;
+          }
+        }
+        Object.assign(p.b, { x: spot.x, y: spot.y, h: spot.h, v: 0, w: 0 });
+        p.landed = { kind: "airfield" };
+        this.send(p.ws, { t: "landed", where: "Flugfeld" });
+      }
+      return;
+    }
+    if (Math.abs(p.b.v) > 6) return;
+    for (const c of this.players.values()) {
+      const cd = BOATS[c.type];
+      if (!cd.heliSpots || c.team !== p.team) continue;
+      for (let i = 0; i < cd.heliSpots.length; i++) {
+        const sp = heliSpotWorld(c.b, i, cd);
+        if (Math.hypot(sp.x - p.b.x, sp.y - p.b.y) > 18) continue;
+        const busy = [...this.players.values()].some((o) => o !== p && o.landed && o.landed.carrierId === c.id && o.landed.spot === i);
+        if (busy) continue;
+        p.landed = { kind: "carrier", carrierId: c.id, spot: i };
+        this.send(p.ws, { t: "landed", where: `Träger von ${c.name}` });
+        return;
+      }
+    }
+    if (inRect(airfieldRect(p.team), p.b.x, p.b.y)) {
+      p.b.v = 0;
+      p.landed = { kind: "airfield" };
+      this.send(p.ws, { t: "landed", where: "Flugfeld" });
+    }
+  }
+
+  takeOff(p) {
+    const def = BOATS[p.type];
+    if (def.kind === "drone") {
+      const s = runwayStart(p.team);
+      Object.assign(p.b, { x: s.x, y: s.y, h: s.h, v: def.minSpeed, w: 0 });
+    }
+    p.landed = null;
+    p.ackLaunch = 3; // s: nach dem Start nicht sofort wieder landen
+    this.send(p.ws, { t: "landed", where: null });
   }
 
   spawnInHarbor(team, def) {
@@ -532,7 +640,39 @@ export class World {
 
   emitting(p) {
     const def = BOATS[p.type];
+    if (this.jamming(p)) return true; // Störsender strahlt (Home-on-Jam)
     return def.kind === "ship" && (p.radarOn || (p.abT > 0 && def.ability === "radar"));
+  }
+
+  // Radarwarnanlage: wer hat mich im Lock (Peilung, Fortschritt) und welche Flugkörper fliegen auf mich zu
+  threats(p) {
+    const r = (n, f = 100) => Math.round(n * f) / f;
+    const lk = [];
+    for (const o of this.players.values()) {
+      if (o.team === p.team || o.lockId !== p.id) continue;
+      lk.push([r(Math.atan2(o.b.y - p.b.y, o.b.x - p.b.x)), r(o.lockT / WEAPONS.lock.time)]);
+    }
+    const ms = [];
+    for (const q of this.projectiles) {
+      if (q.team === p.team || q.dead) continue;
+      if (q.target !== p.id && q.air !== p.id) continue;
+      ms.push([r(Math.atan2(q.y - p.b.y, q.x - p.b.x)), Math.round(Math.hypot(q.x - p.b.x, q.y - p.b.y))]);
+    }
+    return { lk, ms };
+  }
+
+  jamming(p) {
+    const st = p.ws_ && p.ws_.jammer;
+    return !!(st && st.act > 0);
+  }
+
+  // Ist Position (x, y) im Wirkbereich eines aktiven gegnerischen Störers? (gegnerisch aus Sicht von team)
+  jammedAt(x, y, team, radiusKey = "radius") {
+    for (const j of this.players.values()) {
+      if (j.team === team || !this.jamming(j)) continue;
+      if (Math.hypot(j.b.x - x, j.b.y - y) < WEAPONS.jammer[radiusKey]) return j;
+    }
+    return null;
   }
 
   // Welche Gegner erfasst jedes Team? (eigene Fahrzeuge, Basis, gehaltene Stützpunkte)
@@ -542,7 +682,8 @@ export class World {
     for (const p of list) {
       const def = BOATS[p.type];
       const abilityRadar = p.abT > 0 && def.ability === "radar";
-      sources[p.team].push({ x: p.b.x, y: p.b.y, r: sensorRange(def, p.radarOn, abilityRadar) });
+      const jam = this.jammedAt(p.b.x, p.b.y, p.team) ? WEAPONS.jammer.sensorFactor : 1;
+      sources[p.team].push({ x: p.b.x, y: p.b.y, r: sensorRange(def, p.radarOn, abilityRadar) * jam });
     }
     for (const t of [0, 1]) {
       const hr = harborRect(teamBase(t));
@@ -596,7 +737,7 @@ export class World {
 
   fire(p, w) {
     const def = BOATS[p.type];
-    if (!def.weapons.includes(w)) return;
+    if (!p.weapons.includes(w) || p.landed) return;
     const W = WEAPONS[w];
     const st = p.ws_[w];
     if (!st || st.cd > 0) return;
@@ -662,6 +803,20 @@ export class World {
         }
       }
       this.events.push(["hflaunch", x, y, b.h]);
+    } else if (W.kind === "jam") {
+      st.act = W.duration;
+      st.cd = W.duration + W.reload;
+      this.events.push(["jam", b.x, b.y]);
+    } else if (W.kind === "rkt") {
+      if (st.n <= 0) return;
+      st.n--;
+      st.cd = W.interval;
+      const R = W.rails[st.rail++ % W.rails.length];
+      const x = b.x + R.x * c - R.y * s;
+      const y = b.y + R.x * s + R.y * c;
+      const a = toMouse + (Math.random() - 0.5) * 2 * W.spread;
+      this.spawnProj(p, w, x, y, a, W.speed);
+      this.events.push(["muzzle", x, y, a]);
     } else if (W.kind === "sam") {
       if (st.n <= 0) return;
       st.n--;
@@ -669,7 +824,13 @@ export class World {
       let x;
       let y;
       let a;
-      if (def.vls && w === "sm2") {
+      if (W.rails) {
+        // Luft-Luft-Rakete vom Hubschrauber
+        const R = W.rails[st.rail++ % W.rails.length];
+        x = b.x + R.x * c - R.y * s;
+        y = b.y + R.x * s + R.y * c;
+        a = toMouse;
+      } else if (def.vls && w === "sm2") {
         // Senkrechtstart aus dem VLS
         x = b.x + c * def.vls.x - s * def.vls.y;
         y = b.y + s * def.vls.x + c * def.vls.y;
@@ -789,11 +950,32 @@ export class World {
         if (inp) {
           p.last = inp;
           p.ack = inp.s;
-          stepEntity(p.b, inp, def, this.map);
-        } else if (steps === 0) {
+          if (!p.landed) stepEntity(p.b, inp, def, this.map);
+        } else if (steps === 0 && !p.landed) {
           stepEntity(p.b, p.last, def, this.map);
         }
       }
+      p.ackLaunch = Math.max(0, (p.ackLaunch || 0) - DT);
+      if (p.landed) {
+        // Auf dem Träger mitfahren
+        if (p.landed.kind === "carrier") {
+          const c = this.players.get(p.landed.carrierId);
+          if (!c) p.landed = null;
+          else {
+            const sp = heliSpotWorld(c.b, p.landed.spot, BOATS[c.type]);
+            Object.assign(p.b, { x: sp.x, y: sp.y, h: sp.h, v: 0, w: 0 });
+          }
+        }
+        // Am Boden: reparieren und schnell aufmunitionieren; W = Start
+        if (p.landed) {
+          p.hp = Math.min(def.hp, p.hp + def.hp * 0.15 * DT);
+          for (const w of p.weapons) {
+            const st = p.ws_[w];
+            if (st.max !== undefined) st.rel += DT * 5;
+          }
+          if ((p.last.th || 0) > 0.5) this.takeOff(p);
+        }
+      } else this.checkLanding(p);
       const aim = aimAngles(p.b, def, p.mx, p.my);
       p.gunAim = aim.gun;
       p.gunOk = aim.gunOk;
@@ -801,10 +983,11 @@ export class World {
       if (def.gun) p.gunAng = slewTurret(p.gunAng, aim.gun, def.gun, DT);
       if (def.ram) p.ramAng = slewTurret(p.ramAng, aim.ram, def.ram, DT);
       // Nachladen
-      for (const w of def.weapons) {
+      for (const w of p.weapons) {
         const st = p.ws_[w];
         const W = WEAPONS[w];
         st.cd = Math.max(0, st.cd - DT);
+        if (st.act !== undefined) st.act = Math.max(0, st.act - DT);
         if (st.cells) for (let i = 0; i < st.cells.length; i++) st.cells[i] = Math.max(0, st.cells[i] - DT);
         if (st.max !== undefined) {
           if (st.n < st.max) {
@@ -851,6 +1034,9 @@ export class World {
         p.lockId = 0;
         p.lockT = 0;
         this.send(p.ws, { t: "lockmsg", m: "AGIS: Ziel verloren" });
+      } else if (this.jammedAt(t.b.x, t.b.y, p.team, "lockRadius")) {
+        // Ziel wird von einem Störer gedeckt: Lock zerfällt
+        p.lockT = Math.max(0, p.lockT - DT);
       } else p.lockT = Math.min(WEAPONS.lock.time, p.lockT + DT);
     }
 
@@ -886,6 +1072,10 @@ export class World {
       p.team,
       BOATS[p.type].typeId,
       this.emitting(p) ? 1 : 0,
+      // Luftfahrzeuge: Hangar-Bewaffnung (für die Darstellung) und aktiver Störsender
+      isAir(BOATS[p.type]) ? p.weapons[p.weapons.length - 1] : 0,
+      this.jamming(p) ? 1 : 0,
+      p.landed ? 1 : 0,
     ];
     const rows = new Map(alive.map((p) => [p.id, row(p)]));
     const ev = this.events.map((e) => e.map((v) => (typeof v === "number" ? r(v, 10) : v)));
@@ -907,9 +1097,10 @@ export class World {
       const marked = [...new Set(members.filter((p) => p.lockId && p.lockT >= WEAPONS.lock.time).map((p) => p.lockId))];
       for (const p of members) {
         const def = BOATS[p.type];
-        const w = def.weapons.map((k) => {
+        const w = p.weapons.map((k) => {
           const st = p.ws_[k];
           const W = WEAPONS[k];
+          if (st.act !== undefined) return [r(st.cd / (W.duration + W.reload)), r(st.act / W.duration)];
           if (st.cells) return st.cells.map((v) => r(v / W.reload));
           if (st.max !== undefined) return [st.n, st.max, r(st.rel / W.reload)];
           return [r(st.cd / W.reload)];
@@ -932,6 +1123,10 @@ export class World {
             rc: r(p.abCd, 10),
             ro: p.radarOn ? 1 : 0,
             det: this.det[1 - team].has(p.id) ? 1 : 0,
+            wl: p.weapons,
+            ld: p.landed ? 1 : 0,
+            jam: this.jammedAt(p.b.x, p.b.y, p.team) ? 1 : 0,
+            ...this.threats(p),
             $: p.acct ? p.acct.money : 0,
             own: p.acct ? p.acct.owned : START_SHIP,
           },
@@ -944,7 +1139,18 @@ export class World {
   stepProjectile(q) {
     const owner = this.players.get(q.owner);
     const W = WEAPONS[q.w];
-    if (q.k === "ssm" || q.k === "agm") {
+    // Störung: gelenkte Flugkörper in der Nähe eines gegnerischen Störers können ihr Ziel verlieren
+    if ((q.k === "ssm" || q.k === "agm" || q.k === "sam") && (q.target || q.air) && this.jammedAt(q.x, q.y, q.team, "lockRadius")) {
+      if (Math.random() < WEAPONS.jammer.breakChance) {
+        q.target = 0;
+        q.air = 0;
+        q.tx = q.ty = null;
+        q.jamUntil = this.tick + 40;
+      }
+    }
+    if (q.jamUntil && this.tick < q.jamUntil && q.k !== "arm") {
+      // gestört: fliegt geradeaus weiter
+    } else if (q.k === "ssm" || q.k === "agm") {
       q.v = Math.min(W.speed, q.v + (q.k === "ssm" ? 110 : 160) * DT);
       let goal = null;
       if (q.target) {
@@ -1056,6 +1262,15 @@ export class World {
       }
     }
 
+    // ARM gegen einen Störsender in der Luft
+    if (q.k === "arm" && q.target) {
+      const t = this.players.get(q.target);
+      if (t && isAir(BOATS[t.type]) && segDist(t.b.x, t.b.y, px, py, q.x, q.y) < 16) {
+        this.events.push(["bighit", t.b.x, t.b.y]);
+        this.damage(t, W.damage, owner);
+        return false;
+      }
+    }
     // Rohrwaffen und MG treffen auch Luftfahrzeuge
     if (q.k === "gun" || q.k === "mg") {
       for (const p of this.players.values()) {
@@ -1087,8 +1302,8 @@ export class World {
       }
     }
 
-    if (q.k !== "sam" && q.k !== "arm" && q.k !== "agm" && isOnLand(this.map, q.x, q.y)) {
-      this.events.push([q.k === "gun" || q.k === "mg" ? "dirt" : "bighit", q.x, q.y]);
+    if ((q.k === "gun" || q.k === "mg" || q.k === "ssm" || q.k === "rkt") && isOnLand(this.map, q.x, q.y)) {
+      this.events.push([q.k === "gun" || q.k === "mg" ? "dirt" : q.k === "rkt" ? "hit" : "bighit", q.x, q.y]);
       return false;
     }
     const half = WORLD_SIZE / 2;
@@ -1148,6 +1363,7 @@ export class World {
   damage(p, dmg, attacker) {
     if (p.protect > 0 || p.hp <= 0) return;
     if (inRect(harborRect(teamBase(p.team)), p.b.x, p.b.y)) return; // sicherer Hafen
+    if (inRect(airfieldRect(p.team), p.b.x, p.b.y)) return; // eigenes Flugfeld
     const real = Math.min(dmg, p.hp);
     p.hp -= dmg;
     if (attacker && attacker !== p && attacker.team !== p.team) {

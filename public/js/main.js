@@ -83,6 +83,9 @@ const state = {
   marked: new Set(), // vom Team markierte Ziele
   rafts: [], // Schiffbrüchige
   spawnLoc: "", // "" = Heimathafen, "op:<id>" = Stützpunkt
+  myWeapons: [], // aktuelle Bewaffnung (Hangar)
+  landed: false,
+  hangarOpen: false,
 };
 // Anonymes Konto pro Browser (Geld und gekaufte Schiffe)
 let TOKEN = "";
@@ -200,7 +203,9 @@ addEventListener("keydown", (e) => {
     send({ t: "radar", on: !state.meInfo.ro });
     showToast(state.meInfo.ro ? "Radar AUS – schwerer zu entdecken, aber kurzsichtig" : "Radar EIN", state.meInfo.ro ? "warn" : "ok");
   }
-  if (/^[1-9]$/.test(k) && DEF.weapons[+k - 1]) selectWeapon(DEF.weapons[+k - 1]);
+  if (/^[1-9]$/.test(k) && state.myWeapons[+k - 1]) selectWeapon(state.myWeapons[+k - 1]);
+  if (!e.repeat && k === "h") toggleHangar();
+  if (k === "escape" && state.hangarOpen) toggleHangar(false);
   if (!e.repeat && k === "f" && state.weapon && !WEAPONS[state.weapon].auto) send({ t: "fire", w: state.weapon });
   if (!e.repeat && k === "r" && state.pred) sendLock();
   if (!e.repeat && k === "e") activateAbility();
@@ -251,10 +256,10 @@ function selectWeapon(w) {
 // Waffenleiste passend zum eigenen Fahrzeug aufbauen
 function buildWeaponBar() {
   const bar = $("weapons");
-  const parts = DEF.weapons.map((w, i) => {
+  const parts = state.myWeapons.map((w, i) => {
     const u = WEAPON_UI[w];
     const W = WEAPONS[w];
-    const cells = W.kind === "ssm" ? DEF.ssm.length : W.kind === "agm" || W.kind === "arm" ? W.count : 0;
+    const cells = W.kind === "ssm" ? DEF.ssm.length : W.kind === "agm" || W.kind === "arm" ? (DEF.mags && DEF.mags[w]) || W.count : 0;
     const extra = cells ? `<div class="cells" id="w_${w}_c">${"<i></i>".repeat(cells)}</div>` : `<div class="wbar"><div id="w_${w}_b"></div></div>`;
     return `<div class="wslot" data-w="${w}"><kbd>${i + 1}</kbd>${u.icon}<div class="wname">${u.name} <span id="w_${w}_n"></span></div><div class="wsub" id="w_${w}_s">${u.sub}</div>${extra}</div>`;
   });
@@ -266,13 +271,15 @@ function buildWeaponBar() {
   bar.innerHTML = parts.join("");
   for (const el of bar.querySelectorAll(".wslot")) el.addEventListener("click", () => selectWeapon(el.dataset.w));
   $("abSlot").addEventListener("click", activateAbility);
-  if (DEF.weapons.length) selectWeapon(DEF.weapons[0]);
+  if (state.myWeapons.length) selectWeapon(state.myWeapons.includes(state.weapon) ? state.weapon : state.myWeapons[0]);
   else state.weapon = null;
 }
 
 function setMyType(type) {
   state.myType = type;
   DEF = BOATS[type];
+  state.myWeapons = [...DEF.weapons];
+  state.landed = false;
   $("boatLabel").textContent = DEF.label;
   $("telegraph").hidden = DEF.kind !== "ship";
   $("radarRow").hidden = DEF.kind !== "ship";
@@ -413,6 +420,14 @@ function onMessage(m) {
       if (m.owned && state.meInfo) state.meInfo.own = m.owned;
       renderShop();
       break;
+    case "landed":
+      if (m.where) {
+        showToast(`Gelandet: ${m.where} – H für Hangar, W zum Starten`, "ok");
+      } else {
+        toggleHangar(false);
+        showToast("Gestartet", "ok");
+      }
+      break;
     case "front": {
       const o = map.outposts[m.i];
       if (!o) break;
@@ -460,7 +475,15 @@ function onSnapshot(m) {
   state.snapshots.push({ time: performance.now(), players, projs });
   if (state.snapshots.length > 30) state.snapshots.shift();
   for (const e of m.e || []) combat.spawnEvent(e);
-  if (m.me) state.meInfo = m.me;
+  if (m.me) {
+    state.meInfo = m.me;
+    if (m.me.wl && m.me.wl.join() !== state.myWeapons.join()) {
+      state.myWeapons = m.me.wl;
+      buildWeaponBar();
+      if (state.hangarOpen) renderHangar();
+    }
+    state.landed = !!m.me.ld;
+  }
   if (m.fr) state.front = m.fr;
   state.marked = new Set(m.mk || []);
   state.rafts = m.rf || [];
@@ -487,6 +510,14 @@ function onSnapshot(m) {
   if (!state.pred) {
     state.pred = { ...server };
     state.prevPred = { ...server };
+    return;
+  }
+  if (state.landed) {
+    // Am Boden bewegt der Server das Fahrzeug (z. B. mit dem Träger) – keine eigene Vorhersage
+    state.pred = { ...server };
+    state.prevPred = { ...server };
+    state.history = [];
+    state.errX = state.errY = state.errH = 0;
     return;
   }
   // Abgleich: Serverzustand übernehmen und unbestätigte Eingaben erneut abspielen
@@ -518,7 +549,7 @@ function fixedStep() {
   state.history.push(input);
   if (state.history.length > 120) state.history.shift();
   state.prevPred = { ...state.pred };
-  stepEntity(state.pred, input, DEF, map);
+  if (!state.landed) stepEntity(state.pred, input, DEF, map);
   if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: "in", ...input, mx: Math.round(state.mouseWorld.x), my: Math.round(state.mouseWorld.y) }));
 }
 
@@ -563,6 +594,8 @@ function interpolatedBoats(br) {
       ramAim: pb[9] ?? 0,
       radar: pb[13] === 1,
       radarOn: pb[16] === 1,
+      pod: pb[17] || 0,
+      jam: pb[18] === 1,
       hp: pb[11] ?? 100,
       prot: pb[12] === 1,
     });
@@ -834,6 +867,75 @@ function miniFlag(c, x, y, w, team) {
   c.strokeRect(x, y, w, h);
 }
 
+// Aktiver Störsender: pulsierende Ringe
+function drawJamRings(b, t) {
+  for (let i = 0; i < 3; i++) {
+    const k = (t * 0.8 + i / 3) % 1;
+    ctx.strokeStyle = `rgba(255,120,80,${0.45 * (1 - k)})`;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 40 + k * 260, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+}
+
+// Radarwarnanlage: Peilmarken um das eigene Fahrzeug (Bildschirmkoordinaten)
+function drawThreats(me, w, h, zoom, t) {
+  const info = state.meInfo;
+  if (!info || !me) return;
+  const cx = w / 2;
+  const cy = h / 2;
+  const R = Math.max(70, Math.max(DEF.length, DEF.beam) * 0.6 * zoom + 34);
+  for (const [a, k] of info.lk || []) {
+    const locked = k >= 1;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(a);
+    ctx.fillStyle = locked ? `rgba(255,60,50,${0.6 + 0.4 * Math.sin(t * 14)})` : "rgba(255,215,94,0.85)";
+    ctx.beginPath();
+    ctx.moveTo(R, -9);
+    ctx.lineTo(R + 16, 0);
+    ctx.lineTo(R, 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = ctx.fillStyle;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, R - 4, -0.18, 0.18);
+    ctx.stroke();
+    ctx.restore();
+  }
+  for (const [a, d] of info.ms || []) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(a);
+    const rr = R + 28;
+    ctx.fillStyle = `rgba(255,40,40,${0.7 + 0.3 * Math.sin(t * 20)})`;
+    ctx.beginPath();
+    ctx.moveTo(rr + 22, 0);
+    ctx.lineTo(rr, -11);
+    ctx.lineTo(rr + 6, 0);
+    ctx.lineTo(rr, 11);
+    ctx.closePath();
+    ctx.fill();
+    ctx.rotate(-a);
+    ctx.font = "800 12px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
+    const tx = Math.cos(a) * (rr + 40);
+    const ty = Math.sin(a) * (rr + 40);
+    const txt = `${(d / 1000).toFixed(1)} km`;
+    ctx.strokeText(txt, tx, ty);
+    ctx.fillStyle = "#ffb4a8";
+    ctx.fillText(txt, tx, ty);
+    ctx.restore();
+  }
+}
+
 // Schiffbrüchige in Rettungsinseln (blinkendes Notlicht)
 function drawRafts(t) {
   for (const [id, x, y] of state.rafts) {
@@ -1086,8 +1188,18 @@ function render(now) {
     ctx.translate(b.x, b.y);
     ctx.rotate(b.h);
     if (b.prot) ctx.globalAlpha = 0.55 + Math.sin(t * 10) * 0.25;
-    const ammo = b.id === state.myId && info ? info.w : undefined;
-    drawVehicle(ctx, b.type, { t, seed: b.id * 7919, ammo, gunner: b.id === state.myId ? me.gunner : Math.PI / 2, flag: TEAMS[teamOf(b.id)].flag });
+    const mine = b.id === state.myId;
+    const ammo = mine && info ? info.w : undefined;
+    const jamIdx = mine ? state.myWeapons.indexOf("jammer") : -1;
+    const jamOn = mine ? jamIdx >= 0 && info && info.w[jamIdx] && info.w[jamIdx][1] > 0 : b.jam;
+    if (jamOn) drawJamRings(b, t);
+    drawVehicle(ctx, b.type, {
+      t, seed: b.id * 7919, ammo, jamOn,
+      weapons: mine ? state.myWeapons : undefined,
+      pod: mine ? undefined : b.pod || undefined,
+      gunner: mine ? me.gunner : Math.PI / 2,
+      flag: TEAMS[teamOf(b.id)].flag,
+    });
     ctx.restore();
     combat.damageFx({ ...b, hp: (b.hp / BOATS[b.type].hp) * 100 }, dtFx);
   }
@@ -1132,6 +1244,8 @@ function render(now) {
     ctx.lineTo(x + 8, y + 16);
     ctx.stroke();
   }
+
+  if (me && rk < 0.6) drawThreats(me, w, h, zoom, t);
 
   if (state.dead) {
     const k = Math.min(1, (now - state.dead.time) / 600);
@@ -1181,6 +1295,22 @@ function updateHud(me) {
     rs.textContent = ro ? "EIN" : "AUS";
     rs.className = ro ? "on" : "off";
     $("detWarn").hidden = !state.meInfo.det;
+    const lk = state.meInfo.lk || [];
+    const ms = state.meInfo.ms || [];
+    const locked = lk.some(([, k]) => k >= 1);
+    const warn = $("rwr");
+    if (ms.length) {
+      const near = Math.min(...ms.map(([, d]) => d));
+      warn.textContent = `⚠ RAKETE${ms.length > 1 ? ` ×${ms.length}` : ""} – ${(near / 1000).toFixed(1)} km`;
+      warn.className = "missile";
+    } else if (lk.length) {
+      warn.textContent = locked ? "⚠ LOCK – du bist aufgeschaltet" : "Gegner schaltet auf …";
+      warn.className = locked ? "locked" : "acq";
+    }
+    warn.hidden = !ms.length && !lk.length;
+    document.body.classList.toggle("missileAlert", ms.length > 0);
+    $("jamWarn").hidden = !state.meInfo.jam;
+    $("landedBanner").hidden = !state.landed;
   }
   updateFrontHud(me);
   if (state.shopOpen && state.meInfo && state.meInfo.$ !== state.shopMoney) {
@@ -1263,7 +1393,7 @@ function updateWeaponBar() {
   };
   const lockedShip = info.l && info.lt >= 1 && BOATS[typeOfId(info.l)]?.kind === "ship";
   const teamMark = state.marked.size > 0;
-  DEF.weapons.forEach((w, i) => {
+  state.myWeapons.forEach((w, i) => {
     const W = WEAPONS[w];
     const st = info.w[i];
     if (!st) return;
@@ -1275,9 +1405,15 @@ function updateWeaponBar() {
       setText(`w_${w}_n`, `${st.filter((v) => v <= 0).length}/${st.length}`);
       setText(`w_${w}_s`, lockedShip ? "→ Lock-Ziel" : teamMark ? "→ Team-Markierung" : "→ Mauszeiger");
     } else {
+      if (W.kind === "jam") {
+        const [cd, act] = st;
+        setBar(`w_${w}_b`, act > 0 ? act : 1 - cd);
+        setText(`w_${w}_s`, act > 0 ? "STÖRT" : cd > 0 ? "lädt" : "bereit (F)");
+        return;
+      }
       const [n, max, rel] = st;
       setText(`w_${w}_n`, `${n}/${max}`);
-      if (W.kind === "sam") setBar(`w_${w}_b`, n >= max ? 1 : rel);
+      if (W.kind === "sam" || W.kind === "rkt") setBar(`w_${w}_b`, n >= max ? 1 : rel);
       else {
         setCells(`w_${w}_c`, (k) => (k < n ? 1 : k === n ? rel : 0));
         if (W.kind === "agm") setText(`w_${w}_s`, lockedShip ? "→ Lock-Ziel" : teamMark ? "→ Team-Markierung" : "→ Mauszeiger");
@@ -1340,6 +1476,57 @@ function showToast(text, kind = "ok") {
   while (box.children.length > 5) box.lastChild.remove();
   setTimeout(() => el.classList.add("out"), 2600);
   setTimeout(() => el.remove(), 3200);
+}
+
+// ---------------- Hangar (Bewaffnung von Luftfahrzeugen) ----------------
+function toggleHangar(open = !state.hangarOpen) {
+  if (open && (!state.landed || !DEF.slots)) {
+    if (open && DEF.slots) showToast("Hangar nur nach der Landung (Flugfeld oder Träger)", "warn");
+    return;
+  }
+  state.hangarOpen = open;
+  $("hangar").hidden = !open;
+  if (open) renderHangar();
+}
+$("hangarClose").addEventListener("click", () => toggleHangar(false));
+
+const LOADOUT_TEXT = {
+  marte: "Seezielflugkörper mit großer Reichweite gegen Schiffe",
+  hellfire: "Lenkflugkörper gegen Schiffe, folgt Lock oder Team-Markierung",
+  stinger_aa: "Luft-Luft-Raketen gegen Hubschrauber, Drohnen und anfliegende Flugkörper",
+  rkt70: "14 ungelenkte Raketen – schnelle Salven auf kurze Entfernung",
+  armiger: "Anti-Radar-Flugkörper: jagt Schiffe mit eingeschaltetem Radar",
+  harm: "Anti-Radar-Flugkörper: jagt Schiffe mit eingeschaltetem Radar",
+  jammer: "Radarstörpod: 8 s Störung – gegnerische Sensoren halbiert, Locks und Lenkwaffen gestört; sendet selbst (ARM-Gefahr)",
+};
+
+function renderHangar() {
+  const box = $("hangarSlots");
+  box.replaceChildren();
+  $("hangarTitle").textContent = `Hangar – ${DEF.label}`;
+  for (const [slot, opts] of Object.entries(DEF.slots || {})) {
+    const head = document.createElement("div");
+    head.className = "spawnhead";
+    head.textContent = `Waffenplatz ${+slot + 1}`;
+    const row = document.createElement("div");
+    row.className = "hangarRow";
+    for (const w of opts) {
+      const W = WEAPONS[w];
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "hangaropt" + (state.myWeapons[+slot] === w ? " sel" : "");
+      const icon = document.createElement("span");
+      icon.innerHTML = WEAPON_UI[w].icon; // feste Symbole aus ui.js
+      const name = document.createElement("b");
+      name.textContent = W.label;
+      const desc = document.createElement("small");
+      desc.textContent = LOADOUT_TEXT[w] || "";
+      b.append(icon, name, desc);
+      b.onclick = () => send({ t: "loadout", slot: +slot, w });
+      row.appendChild(b);
+    }
+    box.append(head, row);
+  }
 }
 
 // ---------------- Schiffsladen ----------------
@@ -1732,10 +1919,9 @@ function renderSpawnOptions() {
     const has = owned.includes(key);
     opts.push({ key, label: def.short, sub: has ? `Stufe ${def.level}${def.heliSpots ? " · Träger" : ""}` : `im Laden · ${fmtMoney(def.price)}`, ok: has });
   }
-  if (carriers.length) {
-    for (const c of carriers) opts.push({ key: `heli:${c.id}`, label: BOATS[heli].short, sub: `auf Träger von ${c.name} · ${c.free} frei`, ok: true });
-  } else opts.push({ key: "heli", label: BOATS[heli].short, sub: "kein Träger im Team", ok: false });
-  opts.push({ key: "drone", label: BOATS[DRONE_OF[team]].short, sub: "Aufklärung · ARM", ok: true });
+  opts.push({ key: "heli:af", label: BOATS[heli].short, sub: "vom Flugfeld", ok: true });
+  for (const c of carriers) opts.push({ key: `heli:${c.id}`, label: BOATS[heli].short, sub: `auf Träger von ${c.name} · ${c.free} frei`, ok: true });
+  opts.push({ key: "drone", label: BOATS[DRONE_OF[team]].short, sub: "vom Flugfeld · ARM/Störpod", ok: true });
   if (!opts.some((o) => o.key === state.spawnChoice && o.ok)) state.spawnChoice = START_SHIP[team];
   optionButtons(box, opts, state.spawnChoice, (k) => {
     state.spawnChoice = k;

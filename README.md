@@ -43,6 +43,34 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 - **Aufklärungsdrohnen** (von der Basis): sehr große Sensorreichweite, Zielmarkierung für das Team, ARM gegen Radare.
   Drohnen fliegen wie Flugzeuge (Mindestgeschwindigkeit) und können keine Stützpunkte erobern.
 
+## Flugfeld, Landen und Hangar
+- Hinter jeder Marinebasis liegt ein **Flugfeld** mit Start- und Landebahn, Rollwegen, Vorfeld, drei Hangars,
+  Tower mit Radar, drei Hubschrauberlandeplätzen und Windsack. Über dem eigenen Flugfeld ist man sicher.
+- **Drohnen** starten auf dem Vorfeld (geparkt) und heben mit W von der Bahn ab. **Hubschrauber** können wahlweise
+  vom Flugfeld oder von einem Träger des Teams starten.
+- **Landen:** Drohne langsam (S halten) über die eigene Bahn fliegen; Hubschrauber langsam über einem freien
+  Landepunkt eines eigenen Trägers oder über dem Flugfeld schweben. Am Boden wird repariert und aufmunitioniert,
+  auf dem Träger fährt man mit. Start mit W.
+- **Hangar (H, nur gelandet):** Bewaffnung wählen – wird im Konto gespeichert.
+
+| Fahrzeug | Waffenplatz-Optionen |
+|---|---|
+| Heron TP | ARMIGER (Anti-Radar) · Radarstörpod |
+| MQ-9 Reaper | AGM-88 HARM · Radarstörpod · Hellfire |
+| NH90 | Marte ER · Stinger (Luft-Luft) · 70-mm-Raketen |
+| Black Hawk | Hellfire · Stinger (Luft-Luft) · 70-mm-Raketen |
+
+- **Radarstörpod (F):** 8 s aktiv, 20 s Abklingzeit. Gegnerische Sensoren im Umkreis von 2,6 km sehen nur halb so weit,
+  Locks auf Ziele in der Nähe bauen sich nicht auf, gelenkte Flugkörper können ihr Ziel verlieren. Der Störer sendet
+  selbst – ARM können sich auf ihn aufschalten.
+
+## Radarwarnanlage
+- **Lock-Warnung:** gelbe Peilmarke während ein Gegner aufschaltet, blinkendes „⚠ LOCK“ und rote Marke, sobald der Lock steht –
+  auch wenn du den Gegner selbst nicht siehst.
+- **Raketenwarnung:** „⚠ RAKETE“ mit Anzahl und Entfernung, ein roter Pfeil je anfliegendem Flugkörper und ein pulsierender
+  roter Bildschirmrand.
+- „⚡ Radar gestört“ zeigt, wenn deine Sensoren von einem Störer betroffen sind.
+
 ## Steuerung
 | Taste | Aktion |
 |---|---|
@@ -55,6 +83,7 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 | R | AGIS-Radar-Lock auf das Schiff unter dem Mauszeiger (nochmal R = lösen) |
 | E | Fähigkeit: Radar-Rundumsuche (Schiffe, Drohnen) bzw. Täuschkörper (Hubschrauber) |
 | T | Radar ein/aus (Schiffe) |
+| H | Hangar (gelandet) |
 | B | Schiffsladen (im eigenen Hafen) |
 | Mausrad | Zoom |
 

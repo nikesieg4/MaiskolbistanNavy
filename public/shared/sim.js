@@ -73,6 +73,7 @@ export const BOATS = {
     typeId: 5, team: 0, kind: "heli", level: 2, price: 0,
     label: "NH90 NFH", short: "NH90",
     weapons: ["mg", "marte"], ability: "flares",
+    slots: { 1: ["marte", "stinger_aa", "rkt70"] },
     length: 19.6, beam: 16.3, maxSpeed: 74, maxReverse: 0.35, accel: 16, decel: 22, turnRate: 1.45,
     hitRadius: 8, hp: 45, sensor: 1600, sig: 0.6,
   },
@@ -80,6 +81,7 @@ export const BOATS = {
     typeId: 6, team: 0, kind: "drone", level: 1, price: 0,
     label: "Aufklärungsdrohne Heron TP", short: "Heron TP",
     weapons: ["armiger"], ability: "radar",
+    slots: { 0: ["armiger", "jammer"] },
     length: 14, beam: 26, maxSpeed: 62, minSpeed: 26, maxReverse: 0, accel: 10, decel: 10, turnRate: 0.55,
     hitRadius: 9, hp: 25, sensor: 3400, sig: 0.45,
   },
@@ -138,6 +140,7 @@ export const BOATS = {
     typeId: 2, team: 1, kind: "heli", level: 2, price: 0,
     label: "UH-60 Black Hawk", short: "Black Hawk",
     weapons: ["mg", "hellfire"], ability: "flares",
+    slots: { 1: ["hellfire", "stinger_aa", "rkt70"] },
     length: 19.8, beam: 16.4, maxSpeed: 72, maxReverse: 0.35, accel: 16, decel: 22, turnRate: 1.5,
     hitRadius: 8, hp: 40, sensor: 1600, sig: 0.6,
   },
@@ -145,6 +148,7 @@ export const BOATS = {
     typeId: 11, team: 1, kind: "drone", level: 1, price: 0,
     label: "Aufklärungsdrohne MQ-9 Reaper", short: "MQ-9 Reaper",
     weapons: ["harm"], ability: "radar",
+    slots: { 0: ["harm", "jammer", "hellfire"] },
     length: 11, beam: 20, maxSpeed: 68, minSpeed: 28, maxReverse: 0, accel: 11, decel: 11, turnRate: 0.6,
     hitRadius: 8, hp: 25, sensor: 3300, sig: 0.45,
   },
@@ -154,6 +158,10 @@ for (const [k, d] of Object.entries(BOATS)) TYPE_BY_ID[d.typeId] = k;
 export const START_SHIP = ["gepard", "cyclone"];
 export const DRONE_OF = ["heron", "reaper"];
 export const isAir = (def) => def.kind === "heli" || def.kind === "drone";
+// Hangar: Optionen für einen Waffenplatz eines Luftfahrzeugs
+export function slotOptions(def, i) {
+  return (def.slots && def.slots[i]) || null;
+}
 
 // Geld (Taler)
 export const ECONOMY = {
@@ -206,6 +214,17 @@ export const WEAPONS = {
     kind: "arm", label: "AGM-88 HARM", count: 2, reload: 20, interval: 1, speed: 260, turn: 1.8, range: 6500, damage: 30,
     seekerRange: 6500, seekerCone: 0.9, rails: [{ x: 0, y: -4.5 }, { x: 0, y: 4.5 }],
   },
+  // Hangar-Bewaffnung für Hubschrauber
+  stinger_aa: {
+    kind: "sam", label: "Stinger (Luft-Luft)", magazine: 4, reload: 10, interval: 0.6, speed: 260, turn: 3.6, range: 1300, damage: 3,
+    seekerRange: 1100, pk: 0.65, rails: [{ x: -0.5, y: -2.6 }, { x: -0.5, y: 2.6 }],
+  },
+  rkt70: {
+    kind: "rkt", label: "70-mm-Raketen", magazine: 14, reload: 1.4, interval: 0.12, speed: 270, range: 1600, damage: 3.5, spread: 0.03,
+    rails: [{ x: 0, y: -2.6 }, { x: 0, y: 2.6 }],
+  },
+  // Radarstörpod für Drohnen: stört gegnerische Sensoren, Locks und Lenkwaffen in der Nähe – sendet dabei selbst
+  jammer: { kind: "jam", label: "Radarstörpod", duration: 8, reload: 20, radius: 2600, lockRadius: 1400, sensorFactor: 0.45, breakChance: 0.05 },
   lock: {
     range: 3000, // Lock-Reichweite (Ziel muss vom Team erfasst sein)
     breakRange: 5500,
@@ -233,8 +252,8 @@ export const ABILITIES = {
   },
 };
 
-export const PROJ = { SHELL: 1, EXOCET: 2, RAM: 3, BULLET: 4, HELLFIRE: 5, ARM: 6 };
-export const PROJ_OF_KIND = { gun: 1, ssm: 2, sam: 3, mg: 4, agm: 5, arm: 6 };
+export const PROJ = { SHELL: 1, EXOCET: 2, RAM: 3, BULLET: 4, HELLFIRE: 5, ARM: 6, ROCKET: 7 };
+export const PROJ_OF_KIND = { gun: 1, ssm: 2, sam: 3, mg: 4, agm: 5, arm: 6, rkt: 7 };
 // Flugkörper, die von Flugabwehr (sam) abgefangen werden können
 export const INTERCEPTABLE = new Set([2, 5, 6]);
 
@@ -444,6 +463,45 @@ export function inRect(r, x, y, m = 0) {
   return x > r.x0 - m && x < r.x1 + m && y > r.y0 - m && y < r.y1 + m;
 }
 
+// ---------- Flugfeld (hinter der Marinebasis im Landesinneren) ----------
+// Lokale Koordinaten wie die Basis (x = vom Basis-Nullpunkt Richtung See, negativ = landeinwärts).
+export const AIRFIELD = {
+  area: [-800, -150, -1200, 1200], // Gelände (sicher für das eigene Team)
+  runway: { x: -500, y0: -950, y1: 950, w: 46 },
+  helipads: [-700, -560, -420].map((y) => ({ x: -260, y })),
+  apron: [520, 640, 760, 880].map((y) => ({ x: -300, y })),
+  hangars: [-180, 40, 260].map((y) => ({ x: -300, y, w: 90, h: 150 })),
+  tower: { x: -330, y: -330 },
+};
+
+function afWorld(team, lx, ly) {
+  const b = teamBase(team);
+  return { x: b.edge + b.dir * lx, y: ly };
+}
+export function airfieldRect(team) {
+  return localRect(teamBase(team), AIRFIELD.area);
+}
+export function runwayRect(team) {
+  const r = AIRFIELD.runway;
+  return localRect(teamBase(team), [r.x - r.w, r.x + r.w, r.y0 - 60, r.y1 + 60]);
+}
+// Drohnen starten am Südende der Bahn Richtung Norden
+export function runwayStart(team) {
+  const r = AIRFIELD.runway;
+  const p = afWorld(team, r.x, r.y1 - 40);
+  return { ...p, h: -Math.PI / 2 };
+}
+export function helipadSpawn(team, i) {
+  const pad = AIRFIELD.helipads[i % AIRFIELD.helipads.length];
+  const p = afWorld(team, pad.x, pad.y);
+  return { ...p, h: teamBase(team).dir === 1 ? 0 : Math.PI };
+}
+export function apronSpot(team, i) {
+  const a = AIRFIELD.apron[i % AIRFIELD.apron.length];
+  const p = afWorld(team, a.x, a.y);
+  return { ...p, h: teamBase(team).dir === 1 ? Math.PI : 0 };
+}
+
 // Kurs vom Liegeplatz zur Hafeneinfahrt (lokal x = 740, y = 0)
 function harborHeading(base, lx, ly) {
   return Math.atan2(-ly, (740 - lx) * base.dir);
@@ -463,10 +521,9 @@ export function carrierSpawn(team) {
   return { x: base.edge + base.dir * s.x, y: s.y, h: base.dir === 1 ? 0 : Math.PI };
 }
 
-// Drohnen starten über der eigenen Basis Richtung See
+// Drohnen starten auf der Startbahn des eigenen Flugfelds
 export function droneSpawn(team) {
-  const base = teamBase(team);
-  return { x: base.edge + base.dir * 200, y: (Math.random() - 0.5) * 900, h: base.dir === 1 ? 0 : Math.PI };
+  return runwayStart(team);
 }
 
 // Landepunkt i eines Trägers in Weltkoordinaten

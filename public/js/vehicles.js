@@ -11,12 +11,15 @@ import { drawNH90, drawNH90Shadow, drawHeron, drawReaper, drawDroneShadow } from
  */
 export function drawVehicle(ctx, type, anim) {
   const def = BOATS[type];
+  // Bewaffnung: eigene (vom Server) oder Standard; bei Luftfahrzeugen bestimmt der letzte Platz die Außenlast
+  const weapons = anim.weapons || (anim.pod ? [...def.weapons.slice(0, -1), anim.pod] : def.weapons);
   // Seezielflugkörper-Zellen (leer = abgefeuert) aus dem Waffenstatus
-  const ssmIdx = def.weapons.findIndex((w) => WEAPONS[w].kind === "ssm");
-  const exo = anim.ammo && ssmIdx >= 0 ? anim.ammo[ssmIdx].map((v) => v <= 0) : undefined;
-  const air = def.weapons.findIndex((w) => ["agm", "arm"].includes(WEAPONS[w].kind));
-  const n = anim.ammo && air >= 0 ? anim.ammo[air][0] : undefined;
-  const a = { ...anim, exo, n, ssmCells: def.ssm };
+  const ssmIdx = weapons.findIndex((w) => WEAPONS[w]?.kind === "ssm");
+  const exo = anim.ammo && ssmIdx >= 0 && Array.isArray(anim.ammo[ssmIdx]) ? anim.ammo[ssmIdx].map((v) => v <= 0) : undefined;
+  const air = weapons.findIndex((w) => ["agm", "arm", "sam", "rkt", "jam"].includes(WEAPONS[w]?.kind) && def.kind !== "ship");
+  const n = anim.ammo && air >= 0 && anim.ammo[air] ? anim.ammo[air][0] : undefined;
+  const pod = def.kind !== "ship" ? weapons[weapons.length - 1] : undefined;
+  const a = { ...anim, exo, n: pod === "jammer" ? undefined : n, pod, ssmCells: def.ssm };
   switch (type) {
     case "gepard":
       return drawGepard(ctx, a);
