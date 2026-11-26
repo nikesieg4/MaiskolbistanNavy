@@ -41,6 +41,7 @@ export function hoveredContact(o, mouse) {
   let best = null;
   let bestD = 28;
   for (const c of o.others) {
+    if (o.isFriend && o.isFriend(c.id)) continue;
     const sx = o.cx + (c.x - o.me.x) * o.zoom;
     const sy = o.cy + (c.y - o.me.y) * o.zoom;
     const d = Math.hypot(sx - mouse.x, sy - mouse.y);
@@ -167,16 +168,19 @@ export function drawRadar(ctx, o) {
     if (glow <= 0) continue;
     const [sx, sy] = toS(p.x, p.y);
     const gr = ctx.createRadialGradient(sx, sy, 0, sx, sy, 14);
-    gr.addColorStop(0, `rgba(200,255,215,${glow * k})`);
-    gr.addColorStop(0.3, `rgba(90,255,150,${0.7 * glow * k})`);
-    gr.addColorStop(1, "rgba(90,255,150,0)");
+    // Eigene Schiffe blau, Gegner grün
+    const friend = o.isFriend && o.isFriend(c.id);
+    const rgb = friend ? "110,190,255" : "90,255,150";
+    gr.addColorStop(0, `rgba(${friend ? "210,235,255" : "200,255,215"},${glow * k})`);
+    gr.addColorStop(0.3, `rgba(${rgb},${0.7 * glow * k})`);
+    gr.addColorStop(1, `rgba(${rgb},0)`);
     ctx.fillStyle = gr;
     ctx.beginPath();
     ctx.arc(sx, sy, 14, 0, TAU);
     ctx.fill();
     const dist = Math.hypot(c.x - o.me.x, c.y - o.me.y);
-    ctx.fillStyle = G(0.4 + 0.6 * glow);
-    ctx.fillText(`${o.names.get(c.id) || "?"}  ${(dist / 1000).toFixed(1)} km`, sx + 12, sy - 10);
+    ctx.fillStyle = friend ? `rgba(150,210,255,${(0.4 + 0.6 * glow) * k})` : G(0.4 + 0.6 * glow);
+    ctx.fillText(`${friend ? "◆ " : ""}${o.names.get(c.id) || "?"}  ${(dist / 1000).toFixed(1)} km`, sx + 12, sy - 10);
   }
 
   // Eigenes Boot

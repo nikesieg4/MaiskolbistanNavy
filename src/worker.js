@@ -18,6 +18,11 @@ import {
   segDist,
   clamp,
   wrapAngle,
+  TEAMS,
+  baseSpawn,
+  harborRect,
+  teamBase,
+  inRect,
 } from "../public/shared/sim.js";
 import ASSETS from "./assets.gen.js";
 
@@ -26,7 +31,7 @@ const MAX_QUEUE = 6;
 const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
-const WORLD_VERSION = 4;
+const WORLD_VERSION = 5;
 
 export default {
   async fetch(request, env) {
@@ -37,6 +42,11 @@ export default {
       }
       const id = env.WORLD.idFromName(`haupt-ozean-v${WORLD_VERSION}`);
       return env.WORLD.get(id).fetch(request);
+    }
+    if (url.pathname === "/status") {
+      // Spielerzahlen je Team für das Startmenü
+      const id = env.WORLD.idFromName(`haupt-ozean-v${WORLD_VERSION}`);
+      return env.WORLD.get(id).fetch(new Request("https://welt/status"));
     }
     const path = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = Object.hasOwn(ASSETS, path) ? ASSETS[path] : null;
@@ -62,6 +72,14 @@ export class World {
   }
 
   async fetch(request) {
+    if (new URL(request.url).pathname === "/status") {
+      const teams = TEAMS.map((t) => ({ players: 0, kills: 0 }));
+      for (const p of this.players.values()) {
+        teams[p.team].players++;
+        teams[p.team].kills += p.kills;
+      }
+      return Response.json({ teams }, { headers: { "cache-control": "no-store" } });
+    }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
@@ -90,7 +108,7 @@ export class World {
           ws.close(1013, "Server voll");
           return;
         }
-        player = this.createPlayer(ws, msg.name, () => {
+        player = this.createPlayer(ws, msg.name, msg.team === 1 ? 1 : 0, () => {
           player = null;
         });
         this.players.set(player.id, player);
@@ -98,9 +116,10 @@ export class World {
           t: "welcome",
           id: player.id,
           tickRate: TICK_RATE,
-          players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, type: p.type })),
+          team: player.team,
+          players: [...this.players.values()].map((p) => ({ id: p.id, name: p.name, type: p.type, team: p.team })),
         });
-        this.broadcast({ t: "join", id: player.id, name: player.name, type: player.type }, player.id);
+        this.broadcast({ t: "join", id: player.id, name: player.name, type: player.type, team: player.team }, player.id);
         this.ensureLoop();
         return;
       }
@@ -136,12 +155,13 @@ export class World {
     ws.addEventListener("error", drop);
   }
 
-  createPlayer(ws, name, onDeath) {
-    const spawn = this.spawnNearOthers();
+  createPlayer(ws, name, team, onDeath) {
+    const spawn = this.spawnInHarbor(team);
     const def = BOATS.gepard;
     return {
       id: this.nextId++,
       name: sanitizeName(name),
+      team,
       type: "gepard",
       ws,
       onDeath,
@@ -172,21 +192,18 @@ export class World {
     };
   }
 
-  // Neue Spieler in Sichtweite eines anderen Bootes starten lassen
-  spawnNearOthers() {
+  // Start im Hafenbecken der eigenen Marinebasis (freien Liegeplatz suchen)
+  spawnInHarbor(team) {
     const others = [...this.players.values()];
-    const lim = WORLD_SIZE / 2 - 300;
-    for (let i = 0; i < 40 && others.length; i++) {
-      const o = others[Math.floor(Math.random() * others.length)].b;
-      const a = Math.random() * Math.PI * 2;
-      const d = 450 + Math.random() * 400;
-      const x = o.x + Math.cos(a) * d;
-      const y = o.y + Math.sin(a) * d;
-      if (Math.abs(x) > lim || Math.abs(y) > lim || isOnLand(this.map, x, y, 90)) continue;
-      if (others.some((p) => Math.hypot(p.b.x - x, p.b.y - y) < 300)) continue;
-      return { x, y, h: Math.random() * Math.PI * 2 };
+    const start = Math.floor(Math.random() * 5);
+    for (let i = 0; i < 5; i++) {
+      const s = baseSpawn(team, start + i);
+      if (!others.some((p) => Math.hypot(p.b.x - s.x, p.b.y - s.y) < 70)) return s;
     }
-    return findSpawn(this.map);
+    // Alle Liegeplätze belegt: vor der Hafeneinfahrt starten
+    const base = teamBase(team);
+    const s = { x: base.edge + base.dir * (780 + Math.random() * 200), y: (Math.random() - 0.5) * 600, h: base.dir === 1 ? 0 : Math.PI };
+    return isOnLand(this.map, s.x, s.y, 60) ? findSpawn(this.map) : s;
   }
 
   // ---------- Waffen ----------
@@ -240,7 +257,7 @@ export class World {
   }
 
   spawnProj(p, type, x, y, h, v, range) {
-    const pr = { id: this.nextProj++, type, owner: p.id, x, y, h, v, dist: 0, range, target: 0, tx: null, ty: null };
+    const pr = { id: this.nextProj++, type, owner: p.id, team: p.team, x, y, h, v, dist: 0, range, target: 0, tx: null, ty: null };
     this.projectiles.push(pr);
     return pr;
   }
@@ -261,12 +278,21 @@ export class World {
     let best = null;
     let bestD = radar ? ABILITIES.radar.pick : L.pick;
     for (const o of this.players.values()) {
-      if (o === p) continue;
+      if (o === p || o.team === p.team) continue;
       let d = Infinity;
       for (const cc of boatCircles(o.b, BOATS[o.type])) d = Math.min(d, Math.hypot(cc.x - x, cc.y - y) - cc.r);
       if (d < bestD) {
         bestD = d;
         best = o;
+      }
+    }
+    if (!best) {
+      // Eigenes Schiff am Zeiger?
+      for (const o of this.players.values()) {
+        if (o !== p && o.team === p.team && Math.hypot(o.b.x - x, o.b.y - y) < 120) {
+          this.send(p.ws, { t: "lockmsg", m: "AGIS: eigenes Schiff – kein Lock" });
+          return;
+        }
       }
     }
     if (!best || best.id === p.lockId) {
@@ -376,6 +402,7 @@ export class World {
       Math.ceil(p.hp),
       p.protect > 0 ? 1 : 0,
       p.radarT > 0 ? 1 : 0,
+      p.team,
     ]);
     const proj = this.projectiles.map((q) => [q.id, q.type, r(q.x, 10), r(q.y, 10), r(q.h)]);
     const ev = this.events.map((e) => e.map((v) => (typeof v === "number" ? r(v, 10) : v)));
@@ -435,7 +462,7 @@ export class World {
         q.target = 0;
         let bestD = W.seekerRange;
         for (const o of this.projectiles) {
-          if (o.type === PROJ.SHELL || o.owner === q.owner || o === q || o.dead) continue;
+          if (o.type === PROJ.SHELL || o.team === q.team || o === q || o.dead) continue;
           const d = Math.hypot(o.x - q.x, o.y - q.y);
           if (d < bestD) {
             bestD = d;
@@ -476,7 +503,7 @@ export class World {
 
     // Treffer an Schiffen
     for (const p of this.players.values()) {
-      if (p.id === q.owner && q.dist < 400) continue;
+      if (p.team === q.team) continue; // kein Eigenbeschuss
       const def = BOATS[p.type];
       if (Math.abs(p.b.x - q.x) > def.length + step || Math.abs(p.b.y - q.y) > def.length + step) continue;
       for (const cc of boatCircles(p.b, def)) {
@@ -518,7 +545,7 @@ export class World {
     let best = null;
     let bestD = range;
     for (const p of this.players.values()) {
-      if (p.id === q.owner) continue;
+      if (p.team === q.team) continue;
       const d = Math.hypot(p.b.x - q.x, p.b.y - q.y);
       if (d > bestD) continue;
       const off = Math.abs(wrapAngle(Math.atan2(p.b.y - q.y, p.b.x - q.x) - q.h));
@@ -531,10 +558,12 @@ export class World {
 
   damage(p, dmg, attacker) {
     if (p.protect > 0 || p.hp <= 0) return;
+    // Sicherer Hafen: im eigenen Hafenbecken kein Schaden
+    if (inRect(harborRect(teamBase(p.team)), p.b.x, p.b.y)) return;
     p.hp -= dmg;
     if (p.hp > 0) return;
     // Versenkt
-    this.events.push(["sink", p.b.x, p.b.y, p.b.h]);
+    this.events.push(["sink", p.b.x, p.b.y, p.b.h, p.team]);
     const by = attacker && attacker !== p ? attacker : null;
     if (by) by.kills++;
     for (const o of this.players.values()) {
@@ -544,7 +573,7 @@ export class World {
       }
     }
     this.players.delete(p.id);
-    this.send(p.ws, { t: "dead", by: by ? by.name : null, x: p.b.x, y: p.b.y, h: p.b.h });
+    this.send(p.ws, { t: "dead", by: by ? by.name : null, x: p.b.x, y: p.b.y, h: p.b.h, team: p.team });
     this.broadcast({ t: "leave", id: p.id, sunkBy: by ? by.id : 0 });
     p.onDeath();
     const ws = p.ws;

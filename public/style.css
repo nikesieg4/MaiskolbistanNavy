@@ -90,3 +90,18 @@ button:hover { background: #ffe38a; } button:disabled { opacity: .5; cursor: def
 .status { min-height: 1.2em; margin: 10px 0 0; color: #ffb4a8; font-size: 14px; }
 @media (max-width: 1100px) { #help { display: none; } #telegraph { display: none; } }
 @media (max-width: 700px) { #players { display: none; } #minimap { width: 120px; height: 120px; } .wslot, .agis { width: auto; } }
+
+/* Teams */
+.flag { display: inline-block; width: 18px; height: 11px; border-radius: 2px; vertical-align: -1px; box-shadow: 0 0 0 1px rgba(0,0,0,.45); }
+#teamScore { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 15px; margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+#plist li.teamhead { display: flex; justify-content: flex-start; gap: 6px; align-items: center; font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .05em; margin: 6px 0 2px -20px; list-style: none; }
+.teams { display: flex; gap: 10px; justify-content: center; margin: 0 0 14px; flex-wrap: wrap; }
+.teamcard { display: flex; flex-direction: column; align-items: center; gap: 3px; width: min(210px, 46%); padding: 12px 10px;
+  border-radius: 12px; background: rgba(255,255,255,.06); color: inherit; border: 2px solid rgba(255,255,255,.14); font-size: 15px; }
+.teamcard:hover { background: rgba(255,255,255,.1); }
+.teamcard small { font-size: 11px; font-weight: 400; opacity: .7; }
+.teamcard .tcount { opacity: .9; font-weight: 600; }
+.teamcard.sel[data-team="0"] { border-color: #f1c94b; background: rgba(241,201,75,.14); }
+.teamcard.sel[data-team="1"] { border-color: #ff7b5c; background: rgba(255,123,92,.14); }
+.tflag { width: 60px; height: 36px; border-radius: 3px; margin-bottom: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.4), 0 0 0 1px rgba(0,0,0,.5); }

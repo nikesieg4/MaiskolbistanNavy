@@ -22,6 +22,7 @@
 
     <div id="players" class="panel">
       <div class="title">Flotte <span id="pcount">0</span></div>
+      <div id="teamScore"></div>
       <ol id="plist"></ol>
     </div>
 
@@ -95,6 +96,20 @@
       <div class="boat-info">
         <b>Schnellboot Klasse 143A „Gepard“</b>
         <span>57,6 m · 40 kn · 76-mm-Geschütz · Exocet · RAM</span>
+      </div>
+      <div class="teams">
+        <button type="button" class="teamcard" data-team="0">
+          <span class="tflag"></span>
+          <b>Maiskolbistan</b>
+          <small>Marinebasis West</small>
+          <small class="tcount" id="tcount0">–</small>
+        </button>
+        <button type="button" class="teamcard" data-team="1">
+          <span class="tflag"></span>
+          <b>Paprikistan</b>
+          <small>Marinebasis Ost</small>
+          <small class="tcount" id="tcount1">–</small>
+        </button>
       </div>
       <form id="joinForm">
         <input id="name" maxlength="16" placeholder="Dein Name" autocomplete="off" />

@@ -13,7 +13,9 @@ import {
   slewTurret,
   WEAPONS,
   ABILITIES,
+  TEAMS,
 } from "../shared/sim.js";
+import { drawBases, drawBasesMinimap } from "./base.js";
 import * as radar from "./radar.js";
 import { drawGepard, GEPARD_EXHAUSTS } from "./gepard.js";
 import * as combat from "./combat.js";
@@ -57,7 +59,14 @@ const state = {
   radarStart: -10, // Zeitpunkt der Aktivierung (s)
   radarWasOn: false,
   radarView: null, // Geometrie der Radaransicht (für Klick-Lock)
+  team: 0, // gewähltes Team
+  teams: new Map(), // Spieler-ID -> Team
 };
+try {
+  state.team = localStorage.getItem("mkn-team") === "1" ? 1 : 0;
+} catch {}
+const teamOf = (id) => state.teams.get(id) ?? 0;
+const isFriend = (id) => teamOf(id) === state.team;
 const WEAPON_KEYS = { 1: "gun", 2: "exocet", 3: "ram" };
 
 const keys = new Set();
@@ -221,14 +230,14 @@ function updateControls(dt) {
 }
 
 // ---------------- Netzwerk ----------------
-function connect(name) {
+function connect(name, team) {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const ws = new WebSocket(`${proto}//${location.host}/ws`);
   state.ws = ws;
   $("status").textContent = "Verbinde …";
   $("play").disabled = true;
 
-  ws.onopen = () => ws.send(JSON.stringify({ t: "join", name }));
+  ws.onopen = () => ws.send(JSON.stringify({ t: "join", name, team }));
   ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
   ws.onclose = () => {
     if (state.ws !== ws) return;
@@ -257,7 +266,12 @@ function onMessage(m) {
     case "welcome":
       state.myId = m.id;
       state.names.clear();
-      for (const p of m.players) state.names.set(p.id, p.name);
+      state.teams.clear();
+      state.team = m.team;
+      for (const p of m.players) {
+        state.names.set(p.id, p.name);
+        state.teams.set(p.id, p.team);
+      }
       state.snapshots = [];
       state.pred = null;
       state.history = [];
@@ -275,12 +289,13 @@ function onMessage(m) {
       break;
     case "join":
       state.names.set(m.id, m.name);
+      state.teams.set(m.id, m.team);
       renderPlayerList();
       break;
     case "dead":
       state.dead = { by: m.by, x: m.x, y: m.y, h: m.h, time: performance.now() };
       state.pred = null;
-      combat.sinkAt(m.x, m.y, m.h);
+      combat.sinkAt(m.x, m.y, m.h, m.team);
       $("hpFill").style.width = "0%";
       $("hpText").textContent = `0 / ${DEF.hp}`;
       break;
@@ -313,6 +328,7 @@ function onSnapshot(m) {
     players.set(p[0], p);
     if (state.kills.get(p[0]) !== p[10]) {
       state.kills.set(p[0], p[10]);
+      state.teams.set(p[0], p[14]);
       killsChanged = true;
     }
   }
@@ -638,15 +654,30 @@ function drawIslands(view, t) {
   }
 }
 
-function drawNameTag(name, x, y, isMe) {
+function miniFlag(c, x, y, w, team) {
+  const f = TEAMS[team].flag;
+  const h = w * 0.6;
+  for (let i = 0; i < 3; i++) {
+    c.fillStyle = f.colors[i];
+    if (f.dir === "vertical") c.fillRect(x + (i * w) / 3, y, w / 3 + 0.4, h);
+    else c.fillRect(x, y + (i * h) / 3, w, h / 3 + 0.4);
+  }
+  c.strokeStyle = "rgba(0,0,0,0.6)";
+  c.lineWidth = 1;
+  c.strokeRect(x, y, w, h);
+}
+
+function drawNameTag(name, x, y, isMe, team) {
   ctx.font = "600 14px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
+  const tw = ctx.measureText(name).width;
   ctx.lineWidth = 4;
   ctx.strokeStyle = "rgba(0,0,0,0.6)";
-  ctx.strokeText(name, x, y);
-  ctx.fillStyle = isMe ? "#ffd75e" : "#ffffff";
-  ctx.fillText(name, x, y);
+  ctx.strokeText(name, x + 10, y);
+  ctx.fillStyle = isMe ? "#ffffff" : TEAMS[team].color;
+  ctx.fillText(name, x + 10, y);
+  miniFlag(ctx, x + 10 - tw / 2 - 20, y - 13, 15, team);
 }
 
 function render(now) {
@@ -753,6 +784,7 @@ function render(now) {
   }
 
   drawIslands(view, t);
+  drawBases(ctx, view, t);
   combat.drawEffectsBelow(ctx, t);
 
   const info = state.meInfo;
@@ -769,7 +801,7 @@ function render(now) {
     const fb = fxFor(b.id);
     fb.navAng = (fb.navAng ?? (b.id * 1.7) % 6.28) + dtFx * (b.radar ? 9 : 2.6);
     fb.domeAng = (fb.domeAng ?? 0) + dtFx * (b.radar ? 3 : 0.45);
-    drawGepard(ctx, { t, seed: b.id * 7919, gun: tu.gun, ram: tu.ram, exo, radarAngle: fb.navAng, domeAngle: fb.domeAng });
+    drawGepard(ctx, { t, seed: b.id * 7919, gun: tu.gun, ram: tu.ram, exo, radarAngle: fb.navAng, domeAngle: fb.domeAng, flag: TEAMS[teamOf(b.id)].flag });
     ctx.restore();
     combat.damageFx(b, dtFx);
   }
@@ -791,14 +823,14 @@ function render(now) {
     state.radarView = {
       w, h, cx: w / 2, cy: h / 2, zoom, k: rk, t, startT: state.radarStart, me, others,
       lockId: info ? info.l : 0, lockT: info ? info.lt : 0, names: state.names,
-      lockRange: ABILITIES.radar.lockRange, mouse: state.mouse,
+      lockRange: ABILITIES.radar.lockRange, mouse: state.mouse, isFriend,
     };
     radar.drawRadar(ctx, state.radarView);
   }
   if (rk < 0.6) for (const b of boats) {
     const sx = w / 2 + (b.x - cam.x) * zoom;
     const sy = h / 2 + (b.y - cam.y) * zoom - Math.max(24, DEF.length * 0.55 * zoom);
-    drawNameTag(state.names.get(b.id) || "?", sx, sy - 8, b.id === state.myId);
+    drawNameTag(state.names.get(b.id) || "?", sx, sy - 8, b.id === state.myId, teamOf(b.id));
     drawHpBar(sx, sy - 4, b.hp);
   }
   // Zeiger-Hinweis: Geschütz kann dort nicht hin
@@ -932,19 +964,43 @@ function updateRadarHud() {
   }
 }
 
+function flagEl(team) {
+  const f = TEAMS[team].flag;
+  const el = document.createElement("span");
+  el.className = "flag";
+  el.style.background =
+    f.dir === "vertical"
+      ? `linear-gradient(90deg, ${f.colors[0]} 33.3%, ${f.colors[1]} 33.3% 66.6%, ${f.colors[2]} 66.6%)`
+      : `linear-gradient(180deg, ${f.colors[0]} 33.3%, ${f.colors[1]} 33.3% 66.6%, ${f.colors[2]} 66.6%)`;
+  return el;
+}
+
 function renderPlayerList() {
   const ol = $("plist");
   ol.replaceChildren();
-  const ids = [...state.names.keys()].sort((a, b) => (state.kills.get(b) || 0) - (state.kills.get(a) || 0) || a - b);
-  for (const id of ids.slice(0, 15)) {
-    const li = document.createElement("li");
-    li.textContent = state.names.get(id);
-    const k = document.createElement("span");
-    k.className = "kills";
-    k.textContent = `${state.kills.get(id) || 0} ⚓`;
-    li.appendChild(k);
-    if (id === state.myId) li.className = "me";
-    ol.appendChild(li);
+  const byKills = (a, b) => (state.kills.get(b) || 0) - (state.kills.get(a) || 0) || a - b;
+  const ids = [...state.names.keys()];
+  const score = [0, 0];
+  for (const id of ids) score[teamOf(id)] += state.kills.get(id) || 0;
+  $("teamScore").replaceChildren(flagEl(0), ` ${score[0]} : ${score[1]} `, flagEl(1));
+  // Eigenes Team zuerst
+  for (const team of [state.team, 1 - state.team]) {
+    const members = ids.filter((id) => teamOf(id) === team).sort(byKills);
+    const head = document.createElement("li");
+    head.className = "teamhead";
+    head.style.color = TEAMS[team].color;
+    head.append(flagEl(team), ` ${TEAMS[team].name} (${members.length})`);
+    ol.appendChild(head);
+    for (const id of members.slice(0, 8)) {
+      const li = document.createElement("li");
+      li.textContent = state.names.get(id);
+      const k = document.createElement("span");
+      k.className = "kills";
+      k.textContent = `${state.kills.get(id) || 0} ⚓`;
+      li.appendChild(k);
+      if (id === state.myId) li.className = "me";
+      ol.appendChild(li);
+    }
   }
   $("pcount").textContent = state.names.size;
 }
@@ -967,6 +1023,8 @@ const mmBase = (() => {
     g.fillStyle = "#5e9a4a";
     g.fill(ig.grass);
   }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  drawBasesMinimap(g, (x) => 200 + x * s, s);
   return c;
 })();
 
@@ -1001,7 +1059,7 @@ function drawMinimap(me, others) {
   const lockId = info ? info.l : 0;
   for (const o of others) {
     if (o.id === lockId) continue;
-    mctx.fillStyle = "#ffffff";
+    mctx.fillStyle = isFriend(o.id) ? "#8fe3ff" : "#ff5a4e";
     mctx.beginPath();
     mctx.arc(toM(o.x), toM(o.y), 2.5, 0, Math.PI * 2);
     mctx.fill();
@@ -1107,6 +1165,7 @@ function renderMenuBackground(now) {
   ctx.fillStyle = waterPattern;
   ctx.fillRect(view.x0, view.y0, view.x1 - view.x0, view.y1 - view.y0);
   drawIslands(view, t);
+  drawBases(ctx, view, t);
   state.pred = keep;
 }
 
@@ -1146,7 +1205,7 @@ function drawPreview(now) {
   }
   pctx.fillStyle = "rgba(235,248,255,0.35)";
   pctx.fillRect(-40, -2.2, 11.5, 4.4);
-  drawGepard(pctx, { t, seed: 4242 });
+  drawGepard(pctx, { t, seed: 4242, flag: TEAMS[state.team].flag });
 }
 
 const nameInput = $("name");
@@ -1159,10 +1218,41 @@ $("joinForm").addEventListener("submit", (e) => {
   try {
     localStorage.setItem("mkn-name", name);
   } catch {}
+  try {
+    localStorage.setItem("mkn-team", String(state.team));
+  } catch {}
   if (state.ws) state.ws.close();
   fx.clear();
-  connect(name);
+  connect(name, state.team);
   nameInput.blur();
 });
+
+// ---------------- Teamauswahl ----------------
+function selectTeam(team) {
+  state.team = team;
+  for (const el of document.querySelectorAll(".teamcard")) el.classList.toggle("sel", +el.dataset.team === team);
+}
+for (const el of document.querySelectorAll(".teamcard")) {
+  const team = +el.dataset.team;
+  const f = flagEl(team);
+  f.className = "tflag";
+  el.querySelector(".tflag").replaceWith(f);
+  el.addEventListener("click", () => selectTeam(team));
+}
+selectTeam(state.team);
+
+async function refreshTeamStatus() {
+  if (!$("menu").hidden) {
+    try {
+      const r = await fetch("/status", { cache: "no-store" });
+      const { teams } = await r.json();
+      teams.forEach((tm, i) => {
+        $(`tcount${i}`).textContent = `${tm.players} ${tm.players === 1 ? "Schiff" : "Schiffe"} · ${tm.kills} ⚓`;
+      });
+    } catch {}
+  }
+  setTimeout(refreshTeamStatus, 3000);
+}
+refreshTeamStatus();
 
 requestAnimationFrame(frame);

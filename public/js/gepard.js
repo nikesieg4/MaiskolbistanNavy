@@ -579,36 +579,42 @@ function drawRam(ctx, angle) {
   ctx.restore();
 }
 
-function drawFlag(ctx, t, phase) {
-  // Bundesdienstflagge (Schwarz-Rot-Gold) am Heckflaggenstock, weht im Wind
+// Teamflagge am Heckflaggenstock, weht im Wind.
+// flag: { dir: "vertical" | "horizontal", colors: [3 Farben] } – vertical = Streifen senkrecht zum Fahnenmast.
+const DEFAULT_FLAG = { dir: "vertical", colors: ["#7A0F1A", "#C9A227", "#7A0F1A"] };
+function drawFlag(ctx, t, phase, flag = DEFAULT_FLAG) {
   ctx.save();
   ctx.translate(-HL + 0.4, 0);
   ctx.fillStyle = "#c0c6ca";
   circle(ctx, 0, 0, 0.14);
   ctx.fill();
-  const len = 2.4;
+  const len = 2.5; // Seitenverhältnis 5 : 3
   const wid = 1.5;
-  const segs = 8;
-  const cols = ["#111111", "#dd0000", "#ffce00"];
-  for (let band = 0; band < 3; band++) {
-    ctx.fillStyle = cols[band];
+  const segs = 9;
+  const wave = (u) => Math.sin(t * 7 + phase - u * 5) * 0.28 * u;
+  const band = (u0, u1, v0, v1, color) => {
+    ctx.fillStyle = color;
     ctx.beginPath();
     for (let i = 0; i <= segs; i++) {
-      const u = i / segs;
-      const x = -u * len;
-      const wave = Math.sin(t * 7 + phase - u * 5) * 0.28 * u;
-      const y0 = -wid / 2 + (band * wid) / 3 + wave;
-      if (i === 0) ctx.moveTo(x, y0);
-      else ctx.lineTo(x, y0);
+      const u = u0 + ((u1 - u0) * i) / segs;
+      ctx.lineTo(-u * len, -wid / 2 + v0 * wid + wave(u));
     }
     for (let i = segs; i >= 0; i--) {
-      const u = i / segs;
-      const x = -u * len;
-      const wave = Math.sin(t * 7 + phase - u * 5) * 0.28 * u;
-      ctx.lineTo(x, -wid / 2 + ((band + 1) * wid) / 3 + wave);
+      const u = u0 + ((u1 - u0) * i) / segs;
+      ctx.lineTo(-u * len, -wid / 2 + v1 * wid + wave(u));
     }
     ctx.closePath();
     ctx.fill();
+  };
+  for (let i = 0; i < 3; i++) {
+    if (flag.dir === "vertical") band(i / 3, (i + 1) / 3, 0, 1, flag.colors[i]);
+    else band(0, 1, i / 3, (i + 1) / 3, flag.colors[i]);
+  }
+  // Schattierung der Falten
+  ctx.globalAlpha = 0.18;
+  for (let i = 0; i < segs; i++) {
+    const u = i / segs;
+    if (Math.cos(t * 7 + phase - u * 5) > 0.3) band(u, u + 1 / segs, 0, 1, "#000");
   }
   ctx.restore();
 }
@@ -671,7 +677,7 @@ export function drawGepard(ctx, anim) {
   drawSuperstructure(ctx);
   drawMast(ctx, t, radarAngle, domeAngle);
   drawGun(ctx, gunAngle, 0);
-  drawFlag(ctx, t, ph);
+  drawFlag(ctx, t, ph, anim.flag);
 
   // Gösch / Bugflaggenstock
   ctx.fillStyle = "#c0c6ca";

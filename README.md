@@ -5,6 +5,18 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 
 **Live:** https://maiskolbistan-navy.nikesieg0.workers.dev
 
+## Teams und Marinebasen
+Im Startmenü wählt man ein Team:
+- **Maiskolbistan** – Marinebasis West. Flagge: Staatsflagge der Republik Maiskolbistan
+  (senkrecht Rot · Gold · Rot, aus `assets/flagge.svg` in nikesieg4/maiskolbistan-info).
+- **Paprikistan** – Marinebasis Ost. Flagge (eigener Entwurf): waagerecht Rot · Orange · Grün.
+
+Jede Basis hat Hafenbecken mit Molen, Molenfeuern und Piers, Hauptquartier, Flaggenmast, Radarturm, Hafenkräne,
+Hafenbahn, Tanklager, Kasernen und drei Werften (Werft 1 Schnellboote mit Trockendock und Portalkran,
+Werft 2 Fregatten und Werft 3 U-Boote als „in Planung“ für spätere Boote). Man startet im eigenen Hafen;
+im eigenen Hafenbecken („sicherer Hafen“) nimmt man keinen Schaden. Kein Eigenbeschuss, Lock nur auf Gegner.
+Die Teamflagge weht am Heck jedes Schiffes.
+
 ## Steuerung
 | Taste | Aktion |
 |---|---|
@@ -47,6 +59,7 @@ public/            Client (wird beim Build in den Worker eingebettet)
   js/main.js       Netzwerk, Client-Vorhersage, Rendering, HUD, Waffenleiste
   js/combat.js     Flugkörper, Explosionen, Wracks, Lock-Anzeige
   js/radar.js      Radaransicht der Fähigkeit Radar-Rundumsuche
+  js/base.js       Marinebasen mit Werften
 src/worker.js      Worker (Auslieferung + /ws) und Durable Object `World`
 scripts/build-assets.mjs  Bettet public/ in src/assets.gen.js ein
 ```

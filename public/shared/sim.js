@@ -152,6 +152,79 @@ export function islandRadius(isl, theta) {
   return isl.r * r;
 }
 
+// ---------- Teams und Marinebasen ----------
+// Flaggen: Maiskolbistan laut Staatsflagge (assets/flagge.svg aus maiskolbistan-info): senkrecht Rot · Gold · Rot.
+// Paprikistan (eigener Entwurf): waagerecht Rot · Orange · Grün.
+export const TEAMS = [
+  {
+    id: 0,
+    key: "mais",
+    name: "Maiskolbistan",
+    color: "#f1c94b",
+    dark: "#7A0F1A",
+    flag: { dir: "vertical", colors: ["#7A0F1A", "#C9A227", "#7A0F1A"] },
+  },
+  {
+    id: 1,
+    key: "paprika",
+    name: "Paprikistan",
+    color: "#ff7b5c",
+    dark: "#1f6b2c",
+    flag: { dir: "horizontal", colors: ["#D7261E", "#F28C1B", "#2E8B3A"] },
+  },
+];
+
+// Basis-Geometrie in lokalen Koordinaten: x = Abstand vom Kartenrand Richtung See, y quer.
+export const BASE_LAYOUT = {
+  landDepth: 350, // Festland mit Werften
+  landHalf: 1300,
+  // Molen und Piers (lokal: [x0, x1, y0, y1])
+  moles: [
+    [350, 700, -720, -680],
+    [660, 700, -720, -230],
+    [350, 700, 680, 720],
+    [660, 700, 230, 720],
+  ],
+  piers: [
+    [350, 480, -457, -443],
+    [350, 480, -157, -143],
+    [350, 480, 143, 157],
+    [350, 480, 443, 457],
+  ],
+  harbor: [350, 660, -680, 680], // Hafenbecken = sicherer Bereich
+  spawns: [-590, -300, 0, 300, 590].map((y) => ({ x: 560, y })),
+};
+
+export function teamBase(team) {
+  const half = WORLD_SIZE / 2;
+  return team === 0 ? { team, edge: -half, dir: 1 } : { team, edge: half, dir: -1 };
+}
+
+function localRect(base, [x0, x1, y0, y1]) {
+  const a = base.edge + base.dir * x0;
+  const b = base.edge + base.dir * x1;
+  return { x0: Math.min(a, b), x1: Math.max(a, b), y0, y1 };
+}
+
+export function baseRects(base) {
+  const L = BASE_LAYOUT;
+  return [[0, L.landDepth, -L.landHalf, L.landHalf], ...L.moles, ...L.piers].map((r) => localRect(base, r));
+}
+
+export function harborRect(base) {
+  return localRect(base, BASE_LAYOUT.harbor);
+}
+
+export function inRect(r, x, y, m = 0) {
+  return x > r.x0 - m && x < r.x1 + m && y > r.y0 - m && y < r.y1 + m;
+}
+
+export function baseSpawn(team, i) {
+  const base = teamBase(team);
+  const s = BASE_LAYOUT.spawns[i % BASE_LAYOUT.spawns.length];
+  return { x: base.edge + base.dir * s.x, y: s.y, h: base.dir === 1 ? 0 : Math.PI };
+}
+
 export function generateMap(seed = MAP_SEED) {
   const rnd = mulberry32(seed);
   const islands = [];
@@ -162,8 +235,9 @@ export function generateMap(seed = MAP_SEED) {
     const r = 70 + Math.pow(rnd(), 1.8) * 380;
     const x = (rnd() * 2 - 1) * (half - r - 250);
     const y = (rnd() * 2 - 1) * (half - r - 250);
-    // Mitte frei halten und Abstand zwischen Inseln für Fahrrinnen
+    // Mitte frei halten und Abstand zwischen Inseln für Fahrrinnen; Basen an den Rändern frei lassen
     if (Math.hypot(x, y) < 500 + r) continue;
+    if (Math.abs(x) + r * 1.5 > half - 1000) continue;
     let ok = true;
     for (const o of islands) {
       if (Math.hypot(o.x - x, o.y - y) < (o.r + r) * 1.45 + 160) {
@@ -178,10 +252,12 @@ export function generateMap(seed = MAP_SEED) {
     }
     islands.push({ id: islands.length, x, y, r, harm, seed: Math.floor(rnd() * 1e9) });
   }
-  return { size: WORLD_SIZE, islands };
+  const rects = [...baseRects(teamBase(0)), ...baseRects(teamBase(1))];
+  return { size: WORLD_SIZE, islands, rects };
 }
 
 export function isOnLand(map, x, y, margin = 0) {
+  if (map.rects) for (const r of map.rects) if (inRect(r, x, y, margin)) return true;
   for (const isl of map.islands) {
     const dx = x - isl.x;
     const dy = y - isl.y;

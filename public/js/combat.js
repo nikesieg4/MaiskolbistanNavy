@@ -1,5 +1,5 @@
 // Flugkörper, Granaten, Explosionen, Wracks und AGIS-Lock-Anzeige (nur Darstellung).
-import { PROJ } from "../shared/sim.js";
+import { PROJ, TEAMS } from "../shared/sim.js";
 import { drawGepard } from "./gepard.js";
 
 const particles = [];
@@ -78,18 +78,18 @@ export function spawnEvent(e) {
       burst(x, y, 8, 8, { r: 2.5, grow: 3, life: 2.5, color: "30,30,30", alpha: 0.55, drag: 1.5 });
       break;
     case "sink":
-      sinkAt(x, y, h);
+      sinkAt(x, y, h, e[4] | 0);
       break;
   }
 }
 
-export function sinkAt(x, y, h) {
+export function sinkAt(x, y, h, team = 0) {
   explosion(x, y, 7);
   for (let i = 0; i < 6; i++) {
     const d = rand(-22, 22);
     setTimeout(() => explosion(x + Math.cos(h) * d, y + Math.sin(h) * d, rand(2, 4)), rand(100, 2200));
   }
-  wrecks.push({ x, y, h, age: 0, life: 7, roll: rand(-0.25, 0.25) });
+  wrecks.push({ x, y, h, team, age: 0, life: 7, roll: rand(-0.25, 0.25) });
 }
 
 // Abgasspuren der Flugkörper: durchgehende Rauchfahne, die breiter wird und verblasst
@@ -171,7 +171,7 @@ export function drawEffectsBelow(ctx, t) {
     ctx.scale(sc, sc * (1 - k * 0.35));
     ctx.globalAlpha = Math.max(0, 1 - k * 1.1);
     ctx.filter = `brightness(${0.55 - k * 0.3})`;
-    drawGepard(ctx, { t: 0, seed: 1, gun: 0.4, ram: -0.6, exo: [false, false, false, false] });
+    drawGepard(ctx, { t: 0, seed: 1, gun: 0.4, ram: -0.6, exo: [false, false, false, false], flag: TEAMS[w.team].flag });
     ctx.filter = "none";
     ctx.restore();
     ctx.globalAlpha = 1;
