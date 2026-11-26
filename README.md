@@ -11,7 +11,21 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 | W / S | Fahrstufe erhöhen / verringern (bleibt stehen, bis du sie änderst) |
 | A / D | Ruder Backbord / Steuerbord |
 | Leertaste / X | Maschine stopp |
+| Maus | Geschütz und RAM-Starter richten sich auf den Mauszeiger |
+| 1 / 2 / 3 | Waffe wählen: 76 mm, Exocet, RAM (oder Klick in der Waffenleiste) |
+| F | Feuer (76 mm: Dauerfeuer solange gedrückt; Flugkörper: einer pro Tastendruck) |
+| R | AGIS-Radar-Lock auf das Schiff unter dem Mauszeiger (nochmal R = lösen) |
 | Mausrad | Zoom |
+
+## Waffen
+| Waffe | Wirkung |
+|---|---|
+| **76 mm OTO Melara** | Granaten in Turmrichtung, 6 Schaden, 0,6 s Nachladen, 2,2 km. Toter Winkel hinter der Brücke (±150°). |
+| **MM38 Exocet** | 4 Zellen, je 15 s Nachladen, 40 Schaden. Mit Lock: lenkt selbst ins Ziel (mit Vorhalt). Ohne Lock: fliegt zum Mauszeiger, dann sucht der Suchkopf ein Schiff. |
+| **RAM** | 21 Flugkörper, lädt alle 4 s einen nach. Sucht selbstständig anfliegende gegnerische Flugkörper und fängt sie zu 70 % ab. |
+| **AGIS** | Radar-Lock bis 3 km, Aufschaltung dauert 1,2 s, bricht ab über 3,5 km. |
+
+Schiffe haben 100 Trefferpunkte. Inseln blocken Granaten und Flugkörper. Nach dem Ablegen gibt es 4 s Spawnschutz (endet beim ersten Schuss).
 
 ## Boote
 - **Level 1 – Schnellboot Klasse 143A „Gepard“**: 57,6 m, ~40 kn. Detailliertes Vektormodell mit beweglichen Teilen:
@@ -23,7 +37,8 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 public/            Client (wird beim Build in den Worker eingebettet)
   shared/sim.js    Gemeinsame Physik, Kartengenerator, Kollision (Server + Client)
   js/gepard.js     Zeichnung des Gepard-Schnellboots
-  js/main.js       Netzwerk, Client-Vorhersage, Rendering, HUD
+  js/main.js       Netzwerk, Client-Vorhersage, Rendering, HUD, Waffenleiste
+  js/combat.js     Flugkörper, Explosionen, Wracks, Lock-Anzeige
 src/worker.js      Worker (Auslieferung + /ws) und Durable Object `World`
 scripts/build-assets.mjs  Bettet public/ in src/assets.gen.js ein
 ```

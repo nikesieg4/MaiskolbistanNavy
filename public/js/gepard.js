@@ -436,17 +436,18 @@ function drawMast(ctx, t, radarAngle, domeAngle) {
   ctx.restore();
 }
 
-function drawExocet(ctx) {
+function drawExocet(ctx, loaded) {
   // 4 MM38-Starter in zwei gekreuzten Paaren hinter dem Aufbau
   const pairs = [
     { x: -9.2, y: -0.2, a: -0.32 },
     { x: -9.2, y: 0.2, a: 0.32 },
   ];
-  for (const pr of pairs) {
+  pairs.forEach((pr, pi) => {
     ctx.save();
     ctx.translate(pr.x, pr.y);
     ctx.rotate(pr.a);
-    for (const off of [-0.55, 0.55]) {
+    [-0.55, 0.55].forEach((off, oi) => {
+      const full = !loaded || loaded[pi * 2 + oi];
       ctx.fillStyle = "rgba(0,0,0,0.25)";
       rr(ctx, -2.75, off - 0.42, 6.0, 0.95, 0.2);
       ctx.fill();
@@ -468,13 +469,23 @@ function drawExocet(ctx) {
         ctx.lineTo(rx, off + 0.45);
         ctx.stroke();
       }
-      // Frontdeckel
-      ctx.fillStyle = "#3f474c";
-      rr(ctx, 2.8, off - 0.38, 0.25, 0.76, 0.08);
-      ctx.fill();
-    }
+      if (full) {
+        // Frontdeckel
+        ctx.fillStyle = "#3f474c";
+        rr(ctx, 2.8, off - 0.38, 0.25, 0.76, 0.08);
+        ctx.fill();
+      } else {
+        // Abgeschossen: offene, verrußte Mündung
+        ctx.fillStyle = "#121416";
+        rr(ctx, 2.2, off - 0.34, 0.85, 0.68, 0.12);
+        ctx.fill();
+        ctx.fillStyle = "rgba(20,20,20,0.35)";
+        rr(ctx, -3.0, off - 0.45, 1.2, 0.9, 0.18);
+        ctx.fill();
+      }
+    });
     ctx.restore();
-  }
+  });
   // Startgestell
   ctx.fillStyle = "#4f585e";
   rr(ctx, -10.0, -0.6, 1.6, 1.2, 0.2);
@@ -618,7 +629,7 @@ export function drawGepard(ctx, anim) {
   const domeAngle = t * 0.45 + ph * 2;
   // Turm: vom Spieler gerichtet (anim.gun), sonst Suchbewegung (z. B. Menüvorschau)
   const gunAngle = anim.gun ?? Math.sin(t * 0.21 + ph) * 1.25 + Math.sin(t * 0.53 + ph * 1.7) * 0.35;
-  const ramAngle = Math.PI + Math.sin(t * 0.17 + ph * 3) * 1.4;
+  const ramAngle = Math.PI + (anim.ram ?? Math.sin(t * 0.17 + ph * 3) * 1.4);
   const swing = Math.sin(t * 1.7 + ph);
 
   // Wasserlinien-Schatten
@@ -656,7 +667,7 @@ export function drawGepard(ctx, anim) {
   drawRailing(ctx);
   drawRam(ctx, ramAngle);
   drawRhib(ctx, swing);
-  drawExocet(ctx);
+  drawExocet(ctx, anim.exo);
   drawSuperstructure(ctx);
   drawMast(ctx, t, radarAngle, domeAngle);
   drawGun(ctx, gunAngle, 0);

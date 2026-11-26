@@ -13,6 +13,7 @@
   <div id="hud" hidden>
     <div id="topleft" class="panel">
       <div class="boat-name" id="boatLabel">Schnellboot Gepard</div>
+      <div class="hp"><div id="hpFill"></div><span id="hpText">100 / 100</span></div>
       <div class="row"><span>Fahrt</span><b id="speed">0.0 kn</b></div>
       <div class="row"><span>Kurs</span><b id="heading">000°</b></div>
       <div class="row"><span>Position</span><b id="pos">0 / 0</b></div>
@@ -38,8 +39,38 @@
 
     <canvas id="minimap" width="200" height="200" class="panel"></canvas>
 
-    <div id="help" class="panel">
-      <b>W/S</b> Fahrstufe &nbsp; <b>A/D</b> Ruder &nbsp; <b>Leertaste</b> Stopp &nbsp; <b>Mausrad</b> Zoom
+    <div id="bottom">
+      <div id="help">
+        <b>W/S</b> Fahrstufe · <b>A/D</b> Ruder · <b>Leertaste</b> Stopp · <b>F</b> Feuer · <b>R</b> Radar-Lock · <b>1–3</b> Waffe · <b>Mausrad</b> Zoom
+      </div>
+      <div id="weapons" class="panel">
+        <div class="wslot sel" data-w="gun">
+          <kbd>1</kbd>
+          <svg viewBox="0 0 48 24" class="wicon"><ellipse cx="14" cy="12" rx="10" ry="8" fill="#b9c2c7"/><rect x="22" y="10.5" width="22" height="3" rx="1.5" fill="#d9dee1"/><rect x="40" y="9.5" width="5" height="5" rx="1" fill="#8d969b"/></svg>
+          <div class="wname">76 mm</div>
+          <div class="wsub" id="gunState">bereit</div>
+          <div class="wbar"><div id="gunReload"></div></div>
+        </div>
+        <div class="wslot" data-w="exocet">
+          <kbd>2</kbd>
+          <svg viewBox="0 0 48 24" class="wicon"><path d="M4 12 L10 6 L12 6 L11 12 L12 18 L10 18 Z" fill="#9aa3a8"/><path d="M20 12 L26 4 L29 4 L27 12 L29 20 L26 20 Z" fill="#9aa3a8"/><rect x="6" y="10" width="34" height="4" rx="2" fill="#eef1f2"/><path d="M40 10 Q46 12 40 14 Z" fill="#3b4246"/></svg>
+          <div class="wname">Exocet <span id="exoCount">4/4</span></div>
+          <div class="wsub" id="exoMode">→ Mauszeiger</div>
+          <div id="exoCells"><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="wslot" data-w="ram">
+          <kbd>3</kbd>
+          <svg viewBox="0 0 48 24" class="wicon"><rect x="8" y="5" width="4" height="14" rx="1" fill="#a4adb2"/><rect x="8" y="10.5" width="32" height="3" rx="1.5" fill="#f2f4f5"/><circle cx="40" cy="12" r="1.6" fill="#2c3236"/></svg>
+          <div class="wname">RAM <span id="ramCount">21/21</span></div>
+          <div class="wsub">Abwehr von Flugkörpern</div>
+          <div class="wbar"><div id="ramReload"></div></div>
+        </div>
+        <div class="agis">
+          <kbd>R</kbd>
+          <div class="wname">AGIS</div>
+          <div id="lockState">kein Ziel</div>
+        </div>
+      </div>
     </div>
   </div>
 

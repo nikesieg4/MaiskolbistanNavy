@@ -20,8 +20,93 @@ export const BOATS = {
     turnRate: 0.32, // rad/s bei Volllast
     // 76-mm-Turm: Position (m vor Mitte), Schwenkbereich ±arc (hinter der Brücke gesperrt), Schwenkgeschw. rad/s
     gun: { x: 16.5, arc: (150 * Math.PI) / 180, speed: 1.4 },
+    // RAM-Starter am Heck: Ruhestellung nach achtern, Schwenkbereich ±arc um achtern
+    ram: { x: -21.5, arc: (150 * Math.PI) / 180, speed: 1.8 },
+    hp: 100,
   },
 };
+
+// Waffen und Flugkörper. Geschwindigkeiten sind für das Spiel verkürzt.
+export const WEAPONS = {
+  gun: {
+    label: "76 mm OTO Melara",
+    reload: 0.6, // s pro Schuss
+    speed: 320, // m/s
+    range: 2200,
+    damage: 6,
+    spread: 0.012,
+  },
+  exocet: {
+    label: "MM38 Exocet",
+    cells: 4,
+    reload: 15, // s pro Zelle
+    interval: 0.6, // min. Abstand zwischen Starts
+    speed: 140,
+    turn: 1.0, // rad/s
+    range: 4200,
+    damage: 40,
+    seekerRange: 1200,
+    seekerCone: 0.6, // rad halber Öffnungswinkel
+    // Zellen: Position (Bootskoordinaten) und Startrichtung relativ zum Bug
+    launchers: [
+      { x: -6.4, y: -1.5, a: -0.32 },
+      { x: -6.0, y: -0.5, a: -0.32 },
+      { x: -6.0, y: 0.5, a: 0.32 },
+      { x: -6.4, y: 1.5, a: 0.32 },
+    ],
+  },
+  ram: {
+    label: "RAM Luftabwehr",
+    magazine: 21,
+    reload: 4, // s pro nachgeladenem Flugkörper
+    interval: 0.35,
+    speed: 230,
+    turn: 3.2,
+    range: 1800,
+    damage: 6, // gegen Schiffe
+    seekerRange: 1500,
+    pk: 0.7, // Abfangwahrscheinlichkeit
+  },
+  lock: {
+    range: 3000, // Radar-Erfassungsreichweite
+    breakRange: 3500,
+    time: 1.2, // s bis zur Aufschaltung
+    pick: 140, // m um den Mauszeiger
+  },
+};
+
+export const PROJ = { SHELL: 1, EXOCET: 2, RAM: 3 };
+
+// Zielwinkel von Geschütz und RAM-Starter zur Mausposition (Weltkoordinaten).
+// gun: relativ zum Bug, ram: relativ zu achtern. Im toten Winkel → Ruhestellung (0).
+export function aimAngles(b, def, mx, my) {
+  const c = Math.cos(b.h);
+  const s = Math.sin(b.h);
+  const gx = b.x + c * def.gun.x;
+  const gy = b.y + s * def.gun.x;
+  const g = wrapAngle(Math.atan2(my - gy, mx - gx) - b.h);
+  const rx = b.x + c * def.ram.x;
+  const ry = b.y + s * def.ram.x;
+  const r = wrapAngle(Math.atan2(my - ry, mx - rx) - b.h - Math.PI);
+  const gunOk = Math.abs(g) <= def.gun.arc;
+  const ramOk = Math.abs(r) <= def.ram.arc;
+  return { gun: gunOk ? g : 0, gunOk, ram: ramOk ? r : 0, ramOk };
+}
+
+// Turm mit begrenzter Geschwindigkeit nachführen (bleibt im Bereich ±arc → nie durch den toten Winkel)
+export function slewTurret(cur, target, mount, dt) {
+  const step = mount.speed * dt;
+  return clamp(cur + clamp(target - cur, -step, step), -mount.arc, mount.arc);
+}
+
+// Abstand Punkt → Strecke
+export function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? clamp(((px - ax) * dx + (py - ay) * dy) / l2, 0, 1) : 0;
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
 
 export const MS_TO_KN = 1.94384;
 

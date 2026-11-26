@@ -9,8 +9,12 @@ import {
   stepBoat,
   clamp,
   wrapAngle,
+  aimAngles,
+  slewTurret,
+  WEAPONS,
 } from "../shared/sim.js";
 import { drawGepard, GEPARD_EXHAUSTS } from "./gepard.js";
+import * as combat from "./combat.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("game");
@@ -37,9 +41,18 @@ const state = {
   zoom: 4.6,
   playing: false,
   ping: 0,
-  aim: 0, // gewünschter Turmwinkel relativ zum Bug
   mouse: null, // Mausposition in Bildschirmpixeln
+  mouseWorld: { x: 0, y: 0 },
+  aimInfo: null, // { gun, gunOk, ram, ramOk }
+  weapon: "gun",
+  meInfo: null, // Waffen-/Lockstatus vom Server
+  kills: new Map(),
+  dead: null, // { by, x, y, h, time }
+  lockMsg: "",
+  lockMsgT: 0,
+  lastFire: 0,
 };
+const WEAPON_KEYS = { 1: "gun", 2: "exocet", 3: "ram" };
 
 const keys = new Set();
 const fx = new Map(); // id -> { trail: [], smoke: [], lastTrail: 0 }
@@ -134,6 +147,9 @@ addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   keys.add(k);
   if (k === " " || k === "x") state.throttle = 0;
+  if (WEAPON_KEYS[k]) selectWeapon(WEAPON_KEYS[k]);
+  if (!e.repeat && k === "f" && state.weapon !== "gun") send({ t: "fire", w: state.weapon });
+  if (!e.repeat && k === "r" && state.pred) send({ t: "lock", x: Math.round(state.mouseWorld.x), y: Math.round(state.mouseWorld.y) });
   if (["w", "a", "s", "d", " ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) e.preventDefault();
 });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
@@ -149,7 +165,22 @@ addEventListener(
   { passive: true }
 );
 
+function send(obj) {
+  if (state.ws && state.ws.readyState === 1 && state.pred && !state.dead) state.ws.send(JSON.stringify(obj));
+}
+
+function selectWeapon(w) {
+  state.weapon = w;
+  for (const el of document.querySelectorAll(".wslot")) el.classList.toggle("sel", el.dataset.w === w);
+}
+for (const el of document.querySelectorAll(".wslot")) el.addEventListener("click", () => selectWeapon(el.dataset.w));
+
 function updateControls(dt) {
+  // Geschütz: Dauerfeuer solange F gedrückt (Server prüft Nachladezeit)
+  if (keys.has("f") && state.weapon === "gun" && performance.now() - state.lastFire > 100) {
+    state.lastFire = performance.now();
+    send({ t: "fire", w: "gun" });
+  }
   const up = keys.has("w") || keys.has("arrowup");
   const down = keys.has("s") || keys.has("arrowdown");
   const left = keys.has("a") || keys.has("arrowleft");
@@ -175,12 +206,23 @@ function connect(name) {
   ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
   ws.onclose = () => {
     if (state.ws !== ws) return;
-    state.playing = false;
     state.ws = null;
-    $("hud").hidden = true;
-    $("menu").hidden = false;
-    $("play").disabled = false;
-    $("status").textContent = "Verbindung zum Hafen verloren. Erneut ablegen?";
+    const dead = state.dead;
+    const showMenu = () => {
+      state.playing = false;
+      state.dead = null;
+      $("hud").hidden = true;
+      $("menu").hidden = false;
+      $("play").disabled = false;
+      $("play").textContent = dead ? "Neu ablegen!" : "Ablegen!";
+      $("status").textContent = dead
+        ? dead.by
+          ? `Versenkt von ${dead.by}. Neues Boot gefällig?`
+          : "Dein Boot wurde versenkt. Neues Boot gefällig?"
+        : "Verbindung zum Hafen verloren. Erneut ablegen?";
+    };
+    if (dead) setTimeout(showMenu, Math.max(0, 3200 - (performance.now() - dead.time)));
+    else showMenu();
   };
 }
 
@@ -196,6 +238,9 @@ function onMessage(m) {
       state.seq = 0;
       state.throttle = 0;
       state.rudder = 0;
+      state.dead = null;
+      state.meInfo = null;
+      state.kills.clear();
       state.playing = true;
       $("menu").hidden = true;
       $("hud").hidden = false;
@@ -206,8 +251,20 @@ function onMessage(m) {
       state.names.set(m.id, m.name);
       renderPlayerList();
       break;
+    case "dead":
+      state.dead = { by: m.by, x: m.x, y: m.y, h: m.h, time: performance.now() };
+      state.pred = null;
+      combat.sinkAt(m.x, m.y, m.h);
+      $("hpFill").style.width = "0%";
+      $("hpText").textContent = `0 / ${DEF.hp}`;
+      break;
+    case "lockmsg":
+      state.lockMsg = m.m;
+      state.lockMsgT = performance.now();
+      break;
     case "leave":
       state.names.delete(m.id);
+      state.kills.delete(m.id);
       fx.delete(m.id);
       renderPlayerList();
       break;
@@ -225,12 +282,27 @@ function onMessage(m) {
 
 function onSnapshot(m) {
   const players = new Map();
-  for (const p of m.p) players.set(p[0], p);
-  state.snapshots.push({ time: performance.now(), players });
+  let killsChanged = false;
+  for (const p of m.p) {
+    players.set(p[0], p);
+    if (state.kills.get(p[0]) !== p[10]) {
+      state.kills.set(p[0], p[10]);
+      killsChanged = true;
+    }
+  }
+  const projs = new Map();
+  for (const q of m.q || []) projs.set(q[0], q);
+  state.snapshots.push({ time: performance.now(), players, projs });
   if (state.snapshots.length > 30) state.snapshots.shift();
+  for (const e of m.e || []) combat.spawnEvent(e);
+  if (m.me) state.meInfo = m.me;
+  if (killsChanged) renderPlayerList();
+  if (state.dead) return;
 
   const me = players.get(state.myId);
   if (!me) return;
+  state.myHp = me[11];
+  state.myProt = me[12] === 1;
   const server = { x: me[1], y: me[2], h: me[3], v: me[4], w: me[5] };
   if (!state.pred) {
     state.pred = { ...server };
@@ -263,23 +335,21 @@ setInterval(() => {
 function fixedStep() {
   if (!state.pred) return;
   const input = { s: ++state.seq, th: Math.round(state.throttle * 100) / 100, ru: Math.round(state.rudder * 100) / 100 };
-  const aim = Math.round(state.aim * 1000) / 1000;
   state.history.push(input);
   if (state.history.length > 120) state.history.shift();
   state.prevPred = { ...state.pred };
   stepBoat(state.pred, input, DEF, map);
-  if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: "in", ...input, aim }));
+  if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: "in", ...input, mx: Math.round(state.mouseWorld.x), my: Math.round(state.mouseWorld.y) }));
 }
 
 // ---------------- Interpolation der anderen Boote ----------------
 const lerp = (a, b, t) => a + (b - a) * t;
 const lerpAngle = (a, b, t) => a + wrapAngle(b - a) * t;
 
-function interpolatedBoats(now) {
+function bracket(now) {
   const renderTime = now - 110;
   const snaps = state.snapshots;
-  const out = [];
-  if (snaps.length === 0) return out;
+  if (snaps.length === 0) return null;
   let a = snaps[0];
   let b = snaps[snaps.length - 1];
   for (let i = snaps.length - 1; i > 0; i--) {
@@ -291,6 +361,13 @@ function interpolatedBoats(now) {
   }
   const span = b.time - a.time;
   const t = span > 0 ? clamp((renderTime - a.time) / span, 0, 1.2) : 1;
+  return { a, b, t };
+}
+
+function interpolatedBoats(br) {
+  const out = [];
+  if (!br) return out;
+  const { a, b, t } = br;
   for (const [id, pb] of b.players) {
     if (id === state.myId) continue;
     const pa = a.players.get(id) || pb;
@@ -302,7 +379,25 @@ function interpolatedBoats(now) {
       v: lerp(pa[4], pb[4], t),
       th: pb[6],
       aim: pb[8] ?? 0,
+      ramAim: pb[9] ?? 0,
+      hp: pb[11] ?? 100,
+      prot: pb[12] === 1,
     });
+  }
+  return out;
+}
+
+function interpolatedProjectiles(br) {
+  const out = [];
+  if (!br) return out;
+  const { a, b, t } = br;
+  for (const [id, qb] of b.projs) {
+    const qa = a.projs.get(id);
+    if (!qa) {
+      out.push({ id, type: qb[1], x: qb[2], y: qb[3], h: qb[4] });
+      continue;
+    }
+    out.push({ id, type: qb[1], x: lerp(qa[2], qb[2], t), y: lerp(qa[3], qb[3], t), h: lerpAngle(qa[4], qb[4], t) });
   }
   return out;
 }
@@ -310,21 +405,20 @@ function interpolatedBoats(now) {
 // ---------------- Geschützturm ----------------
 // Schwenkt mit begrenzter Geschwindigkeit zum Zielwinkel. Winkel bleiben im Bereich ±arc,
 // daher dreht der Turm nie durch den gesperrten Sektor hinter der Brücke.
-function turretAngle(b, now) {
+function turretAngles(b, now) {
   const f = fxFor(b.id);
   const dt = f.gunT ? Math.min(0.1, (now - f.gunT) / 1000) : 0;
   f.gunT = now;
-  const target = clamp(b.aim ?? 0, -DEF.gun.arc, DEF.gun.arc);
-  const step = DEF.gun.speed * dt;
-  f.gun = clamp(f.gun + clamp(target - f.gun, -step, step), -DEF.gun.arc, DEF.gun.arc);
-  return f.gun;
+  f.gun = slewTurret(f.gun, clamp(b.aim ?? 0, -DEF.gun.arc, DEF.gun.arc), DEF.gun, dt);
+  f.ram = slewTurret(f.ram, clamp(b.ramAim ?? 0, -DEF.ram.arc, DEF.ram.arc), DEF.ram, dt);
+  return f;
 }
 
 // ---------------- Effekte: Kielwasser, Rauch ----------------
 function fxFor(id) {
   let f = fx.get(id);
   if (!f) {
-    f = { trail: [], smoke: [], lastTrail: 0, lastSmoke: 0, gun: 0, gunT: 0 };
+    f = { trail: [], smoke: [], lastTrail: 0, lastSmoke: 0, gun: 0, ram: 0, gunT: 0 };
     fx.set(id, f);
   }
   return f;
@@ -550,12 +644,18 @@ function render(now) {
       h: lerpAngle(pp.h, state.pred.h, a) + state.errH,
       v: lerp(pp.v, state.pred.v, a),
       th: state.throttle,
+      hp: state.myHp ?? 100,
+      prot: state.myProt,
     };
   }
-  const others = interpolatedBoats(now);
+  const br = bracket(now);
+  const others = interpolatedBoats(br);
+  const projs = interpolatedProjectiles(br);
   const boats = me ? [...others, me] : others;
+  const dtFx = state.lastRender ? Math.min(0.1, (now - state.lastRender) / 1000) : 0;
+  state.lastRender = now;
 
-  const cam = me || { x: 0, y: 0 };
+  const cam = me || state.dead || { x: 0, y: 0 };
   const zoom = state.zoom * Math.min(1.25, Math.max(0.7, Math.min(w, h) / 900));
   const scale = zoom * dpr;
   const view = {
@@ -565,20 +665,19 @@ function render(now) {
     y1: cam.y + h / 2 / zoom,
   };
 
-  // Turm auf Mauszeiger richten; liegt das Ziel im toten Winkel hinter der Brücke → nach vorne
-  if (me) {
-    let aim = 0;
-    if (state.mouse) {
-      const mx = cam.x + (state.mouse.x - w / 2) / zoom;
-      const my = cam.y + (state.mouse.y - h / 2) / zoom;
-      const gx = me.x + Math.cos(me.h) * DEF.gun.x;
-      const gy = me.y + Math.sin(me.h) * DEF.gun.x;
-      const rel = wrapAngle(Math.atan2(my - gy, mx - gx) - me.h);
-      if (Math.abs(rel) <= DEF.gun.arc) aim = rel;
-    }
-    state.aim = aim;
-    me.aim = aim;
+  // Mauszeiger in Weltkoordinaten; Geschütz und RAM-Starter darauf richten.
+  // Liegt das Ziel im toten Winkel, gehen sie in Ruhestellung (Geschütz nach vorne).
+  if (state.mouse) {
+    state.mouseWorld = { x: cam.x + (state.mouse.x - w / 2) / zoom, y: cam.y + (state.mouse.y - h / 2) / zoom };
   }
+  if (me) {
+    const ai = state.mouse ? aimAngles(me, DEF, state.mouseWorld.x, state.mouseWorld.y) : { gun: 0, gunOk: false, ram: 0, ramOk: false };
+    state.aimInfo = ai;
+    me.aim = ai.gun;
+    me.ramAim = ai.ram;
+  }
+  combat.updateEffects(dtFx);
+  combat.emitTrails(projs, dtFx);
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "#14507e";
@@ -615,33 +714,94 @@ function render(now) {
   }
 
   drawIslands(view, t);
+  combat.drawEffectsBelow(ctx, t);
 
+  const info = state.meInfo;
   for (const b of boats) {
     drawBowWave(b, t);
+    const tu = turretAngles(b, now);
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.h);
-    drawGepard(ctx, { t, seed: b.id * 7919, gun: turretAngle(b, now) });
+    // Spawnschutz: Boot blinkt
+    if (b.prot) ctx.globalAlpha = 0.55 + Math.sin(t * 10) * 0.25;
+    const exo = b.id === state.myId && info ? info.x.map((v) => v <= 0) : undefined;
+    drawGepard(ctx, { t, seed: b.id * 7919, gun: tu.gun, ram: tu.ram, exo });
     ctx.restore();
+    combat.damageFx(b, dtFx);
   }
   for (const b of boats) drawSmoke(fxFor(b.id), now);
+  combat.drawProjectiles(ctx, projs, t, zoom);
+  combat.drawEffectsAbove(ctx);
+
+  // AGIS-Lock
+  if (me && info && info.l) {
+    const tgt = others.find((o) => o.id === info.l);
+    if (tgt) combat.drawLock(ctx, me, tgt, info.lt, t);
+  }
 
   // Namen (Bildschirmkoordinaten)
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   for (const b of boats) {
     const sx = w / 2 + (b.x - cam.x) * zoom;
     const sy = h / 2 + (b.y - cam.y) * zoom - Math.max(24, DEF.length * 0.55 * zoom);
-    drawNameTag(state.names.get(b.id) || "?", sx, sy, b.id === state.myId);
+    drawNameTag(state.names.get(b.id) || "?", sx, sy - 8, b.id === state.myId);
+    drawHpBar(sx, sy - 4, b.hp);
+  }
+  // Zeiger-Hinweis: Geschütz kann dort nicht hin
+  if (me && state.mouse && state.weapon === "gun" && state.aimInfo && !state.aimInfo.gunOk) {
+    ctx.strokeStyle = "rgba(255,80,70,0.9)";
+    ctx.lineWidth = 2;
+    const { x, y } = state.mouse;
+    ctx.beginPath();
+    ctx.moveTo(x + 8, y + 8);
+    ctx.lineTo(x + 16, y + 16);
+    ctx.moveTo(x + 16, y + 8);
+    ctx.lineTo(x + 8, y + 16);
+    ctx.stroke();
+  }
+
+  if (state.dead) {
+    const k = Math.min(1, (now - state.dead.time) / 600);
+    ctx.globalAlpha = k;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "800 54px system-ui, sans-serif";
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)";
+    ctx.strokeText("VERSENKT", w / 2, h * 0.3);
+    ctx.fillStyle = "#ff5a4e";
+    ctx.fillText("VERSENKT", w / 2, h * 0.3);
+    if (state.dead.by) {
+      ctx.font = "600 20px system-ui, sans-serif";
+      ctx.lineWidth = 4;
+      ctx.strokeText(`von ${state.dead.by}`, w / 2, h * 0.3 + 44);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(`von ${state.dead.by}`, w / 2, h * 0.3 + 44);
+    }
+    ctx.globalAlpha = 1;
   }
 
   if (me) updateHud(me);
   drawMinimap(me, others);
 }
 
+function drawHpBar(x, y, hp) {
+  const W = 56;
+  const k = clamp(hp / DEF.hp, 0, 1);
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(x - W / 2 - 1, y - 1, W + 2, 6);
+  ctx.fillStyle = k > 0.6 ? "#5fd35f" : k > 0.3 ? "#f0c330" : "#ef4b3a";
+  ctx.fillRect(x - W / 2, y, W * k, 4);
+}
+
 // ---------------- HUD ----------------
 let hudTick = 0;
 function updateHud(me) {
   if (++hudTick % 4) return;
+  updateWeaponBar();
+  $("hpFill").style.width = `${clamp(me.hp / DEF.hp, 0, 1) * 100}%`;
+  $("hpText").textContent = `${Math.max(0, Math.ceil(me.hp))} / ${DEF.hp}`;
   $("speed").textContent = `${(me.v * MS_TO_KN).toFixed(1)} kn`;
   const deg = Math.round(((me.h * 180) / Math.PI + 90 + 360) % 360);
   $("heading").textContent = `${String(deg).padStart(3, "0")}°`;
@@ -659,13 +819,49 @@ function updateHud(me) {
   $("rudderNeedle").style.left = `${50 + state.rudder * 45}%`;
 }
 
+function updateWeaponBar() {
+  const info = state.meInfo;
+  if (!info) return;
+  const setBar = (id, k) => ($(id).style.width = `${clamp(k, 0, 1) * 100}%`);
+  setBar("gunReload", 1 - info.g);
+  $("gunState").textContent = info.g > 0 ? "lädt" : state.aimInfo && !state.aimInfo.gunOk ? "toter Winkel" : "bereit";
+  const cells = document.querySelectorAll("#exoCells i");
+  let ready = 0;
+  info.x.forEach((v, i) => {
+    if (v <= 0) ready++;
+    cells[i].style.setProperty("--k", `${(1 - v) * 100}%`);
+    cells[i].classList.toggle("ready", v <= 0);
+  });
+  $("exoCount").textContent = `${ready}/4`;
+  $("ramCount").textContent = `${info.r}/${WEAPONS.ram.magazine}`;
+  setBar("ramReload", info.r >= WEAPONS.ram.magazine ? 1 : info.rr);
+  const lock = $("lockState");
+  const tName = info.l ? state.names.get(info.l) || "?" : "";
+  const recent = performance.now() - state.lockMsgT < 2500;
+  if (info.l && info.lt >= 1) {
+    lock.textContent = `LOCK: ${tName}`;
+    lock.className = "locked";
+  } else if (info.l) {
+    lock.textContent = `Erfasse ${tName} … ${Math.round(info.lt * 100)}%`;
+    lock.className = "acquiring";
+  } else {
+    lock.textContent = recent ? state.lockMsg : "kein Ziel";
+    lock.className = recent ? "msg" : "";
+  }
+  $("exoMode").textContent = info.l && info.lt >= 1 ? "→ Lock-Ziel" : "→ Mauszeiger";
+}
+
 function renderPlayerList() {
   const ol = $("plist");
   ol.replaceChildren();
-  const ids = [...state.names.keys()].sort((a, b) => a - b);
+  const ids = [...state.names.keys()].sort((a, b) => (state.kills.get(b) || 0) - (state.kills.get(a) || 0) || a - b);
   for (const id of ids.slice(0, 15)) {
     const li = document.createElement("li");
     li.textContent = state.names.get(id);
+    const k = document.createElement("span");
+    k.className = "kills";
+    k.textContent = `${state.kills.get(id) || 0} ⚓`;
+    li.appendChild(k);
     if (id === state.myId) li.className = "me";
     ol.appendChild(li);
   }
