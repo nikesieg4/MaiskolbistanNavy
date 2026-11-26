@@ -17,6 +17,7 @@
       <div class="row"><span>Fahrt</span><b id="speed">0.0 kn</b></div>
       <div class="row"><span>Kurs</span><b id="heading">000°</b></div>
       <div class="row"><span>Position</span><b id="pos">0 / 0</b></div>
+      <div class="row money"><span>Taler</span><b id="money">0 Taler</b></div>
       <div class="row small"><span>Ping</span><b id="ping">–</b></div>
     </div>
 
@@ -44,58 +45,35 @@
       <div class="rb-bar"><div id="radarBannerBar"></div></div>
     </div>
 
+    <button id="shopBtn" type="button" hidden>🛒 Schiffsladen <kbd>B</kbd></button>
+    <div id="toasts"></div>
+    <div id="shop" hidden>
+      <div class="shopcard">
+        <div class="shophead"><h2>Schiffsladen</h2><b id="shopMoney">0 Taler</b></div>
+        <p class="shophint">Taler gibt es für Abschüsse, Assists und verursachten Schaden. Gekaufte Schiffe bleiben freigeschaltet und lassen sich im Hafen jederzeit wählen.</p>
+        <div id="shopItems"></div>
+        <button id="shopClose" type="button">Schließen</button>
+      </div>
+    </div>
+
     <canvas id="minimap" width="200" height="200" class="panel"></canvas>
 
     <div id="bottom">
       <div id="help">
-        <b>W/S</b> Fahrstufe · <b>A/D</b> Ruder · <b>Leertaste</b> Stopp · <b>F</b> Feuer · <b>R</b> Lock · <b>E</b> Radar · <b>1–3</b> Waffe · <b>Mausrad</b> Zoom
+        <b>W/S</b> Fahrstufe · <b>A/D</b> Ruder · <b>Leertaste</b> Stopp · <b>F</b> Feuer · <b>R</b> Lock · <b>E</b> Fähigkeit · <b>1–3</b> Waffe · <b>B</b> Laden · <b>Mausrad</b> Zoom
       </div>
-      <div id="weapons" class="panel">
-        <div class="wslot sel" data-w="gun">
-          <kbd>1</kbd>
-          <svg viewBox="0 0 48 24" class="wicon"><ellipse cx="14" cy="12" rx="10" ry="8" fill="#b9c2c7"/><rect x="22" y="10.5" width="22" height="3" rx="1.5" fill="#d9dee1"/><rect x="40" y="9.5" width="5" height="5" rx="1" fill="#8d969b"/></svg>
-          <div class="wname">76 mm</div>
-          <div class="wsub" id="gunState">bereit</div>
-          <div class="wbar"><div id="gunReload"></div></div>
-        </div>
-        <div class="wslot" data-w="exocet">
-          <kbd>2</kbd>
-          <svg viewBox="0 0 48 24" class="wicon"><path d="M4 12 L10 6 L12 6 L11 12 L12 18 L10 18 Z" fill="#9aa3a8"/><path d="M20 12 L26 4 L29 4 L27 12 L29 20 L26 20 Z" fill="#9aa3a8"/><rect x="6" y="10" width="34" height="4" rx="2" fill="#eef1f2"/><path d="M40 10 Q46 12 40 14 Z" fill="#3b4246"/></svg>
-          <div class="wname">Exocet <span id="exoCount">4/4</span></div>
-          <div class="wsub" id="exoMode">→ Mauszeiger</div>
-          <div id="exoCells"><i></i><i></i><i></i><i></i></div>
-        </div>
-        <div class="wslot" data-w="ram">
-          <kbd>3</kbd>
-          <svg viewBox="0 0 48 24" class="wicon"><rect x="8" y="5" width="4" height="14" rx="1" fill="#a4adb2"/><rect x="8" y="10.5" width="32" height="3" rx="1.5" fill="#f2f4f5"/><circle cx="40" cy="12" r="1.6" fill="#2c3236"/></svg>
-          <div class="wname">RAM <span id="ramCount">21/21</span></div>
-          <div class="wsub">Abwehr von Flugkörpern</div>
-          <div class="wbar"><div id="ramReload"></div></div>
-        </div>
-        <div class="agis">
-          <kbd>R</kbd>
-          <div class="wname">AGIS</div>
-          <div id="lockState">kein Ziel</div>
-        </div>
-        <div class="aslot ready" id="abRadar" title="Radar-Rundumsuche: 10 s weite Sicht, Lock bis 5 km">
-          <kbd>E</kbd>
-          <svg viewBox="0 0 48 24" class="wicon"><circle cx="12" cy="12" r="10" fill="none" stroke="#5aff96" stroke-width="1.2" opacity=".6"/><circle cx="12" cy="12" r="5" fill="none" stroke="#5aff96" stroke-width="1" opacity=".5"/><path d="M12 12 L12 2 A10 10 0 0 1 21 8 Z" fill="#5aff96" opacity=".45"/><line x1="12" y1="12" x2="12" y2="2" stroke="#b6ffd0" stroke-width="1.5"/><circle cx="17" cy="7" r="1.4" fill="#c8ffd8"/></svg>
-          <div class="wname">Radar</div>
-          <div class="wsub" id="radarState">bereit</div>
-          <div class="wbar"><div id="radarBar"></div></div>
-        </div>
-      </div>
+      <div id="weapons" class="panel"></div>
     </div>
   </div>
 
   <div id="menu">
     <div class="card">
       <h1><span class="corn">🌽</span> Maiskolbistan<span>Navy</span></h1>
-      <p class="sub">Multiplayer-Seegefecht · Level 1</p>
+      <p class="sub">Multiplayer-Seegefecht</p>
       <canvas id="preview" width="560" height="150"></canvas>
       <div class="boat-info">
-        <b>Schnellboot Klasse 143A „Gepard“</b>
-        <span>57,6 m · 40 kn · 76-mm-Geschütz · Exocet · RAM</span>
+        <b>Marinen von Maiskolbistan und Paprikistan</b>
+        <span>Schnellboot · Hubschrauberträger · Black Hawk</span>
       </div>
       <div class="teams">
         <button type="button" class="teamcard" data-team="0">
@@ -111,6 +89,8 @@
           <small class="tcount" id="tcount1">–</small>
         </button>
       </div>
+      <div class="spawnhead">Starten als <span id="menuMoney"></span></div>
+      <div id="spawnOpts" class="spawns"></div>
       <form id="joinForm">
         <input id="name" maxlength="16" placeholder="Dein Name" autocomplete="off" />
         <button id="play" type="submit">Ablegen!</button>

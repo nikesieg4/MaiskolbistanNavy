@@ -17,17 +17,36 @@ Werft 2 Fregatten und Werft 3 U-Boote als „in Planung“ für spätere Boote).
 im eigenen Hafenbecken („sicherer Hafen“) nimmt man keinen Schaden. Kein Eigenbeschuss, Lock nur auf Gegner.
 Die Teamflagge weht am Heck jedes Schiffes.
 
+## Geld, Schiffsladen und Fahrzeuge
+- **Taler** gibt es für Abschüsse (Schnellboot 1.000, Träger 3.000, Black Hawk 600), Assists (40 % der Prämie,
+  wenn man dem Opfer in den letzten 30 s Schaden zugefügt hat) und 5 Taler je verursachtem Trefferpunkt.
+- Das Konto hängt am Browser (anonymes Token im localStorage) und liegt in einem eigenen Durable Object („konten“),
+  übersteht also Tod, Neuladen und Updates.
+- **Schiffsladen:** Im eigenen Hafen erscheint der Knopf „Schiffsladen“ (Taste B). Gekaufte Schiffe bleiben freigeschaltet
+  und können im Hafen jederzeit gewählt werden.
+
+| Fahrzeug | Preis | Eigenschaften |
+|---|---|---|
+| Schnellboot Gepard (Kl. 143A) | – | 100 HP, 40 kn, 76 mm, Exocet, RAM, Radar-Rundumsuche |
+| Hubschrauberträger Klasse Ähre | 6.000 | 400 HP, 20 kn, 182 m, 2 RAM-Starter (42 Schuss), Radar, **6 Landepunkte** |
+| UH-60 Black Hawk | – | 40 HP, 140 kn, fliegt über Inseln, M240-Türschützen-MG, 8 Hellfire, Täuschkörper |
+
+Black Hawks starten im Startmenü („Starten als → Black Hawk“) auf einem Hubschrauberträger des eigenen Teams,
+solange dort ein Landepunkt frei ist. Hubschrauber können von RAM (70 %), dem 76-mm-Geschütz und MGs getroffen werden;
+Täuschkörper (E) machen sie 3 s lang für RAM unsichtbar.
+
 ## Steuerung
 | Taste | Aktion |
 |---|---|
-| W / S | Fahrstufe erhöhen / verringern (bleibt stehen, bis du sie änderst) |
+| W / S | Schiff: Fahrstufe erhöhen / verringern · Hubschrauber: vorwärts / rückwärts (loslassen = schweben) |
 | A / D | Ruder Backbord / Steuerbord |
 | Leertaste / X | Maschine stopp |
 | Maus | Geschütz und RAM-Starter richten sich auf den Mauszeiger |
 | 1 / 2 / 3 | Waffe wählen: 76 mm, Exocet, RAM (oder Klick in der Waffenleiste) |
 | F | Feuer (76 mm: Dauerfeuer solange gedrückt; Flugkörper: einer pro Tastendruck) |
 | R | AGIS-Radar-Lock auf das Schiff unter dem Mauszeiger (nochmal R = lösen) |
-| E | Fähigkeit Radar-Rundumsuche (10 s aktiv, 30 s Abklingzeit) |
+| E | Fähigkeit: Radar-Rundumsuche (Schiffe) bzw. Täuschkörper (Hubschrauber) |
+| B | Schiffsladen (im eigenen Hafen) |
 | Mausrad | Zoom |
 
 ## Waffen
@@ -60,6 +79,9 @@ public/            Client (wird beim Build in den Worker eingebettet)
   js/combat.js     Flugkörper, Explosionen, Wracks, Lock-Anzeige
   js/radar.js      Radaransicht der Fähigkeit Radar-Rundumsuche
   js/base.js       Marinebasen mit Werften
+  js/carrier.js    Hubschrauberträger
+  js/heli.js       UH-60 Black Hawk
+  js/ui.js         Symbole der Waffenleiste
 src/worker.js      Worker (Auslieferung + /ws) und Durable Object `World`
 scripts/build-assets.mjs  Bettet public/ in src/assets.gen.js ein
 ```
@@ -71,5 +93,6 @@ gleicht es mit dem Serverstand ab und blendet Korrekturen weich aus. Andere Boot
 ```bash
 npm install
 npm run dev      # lokal auf http://localhost:8787
+npx wrangler dev --var DEV_START_MONEY:20000   # lokal mit Startguthaben zum Testen des Ladens
 npm run deploy   # auf Cloudflare (wrangler login bzw. CLOUDFLARE_API_TOKEN nötig)
 ```

@@ -1,6 +1,7 @@
 // Flugkörper, Granaten, Explosionen, Wracks und AGIS-Lock-Anzeige (nur Darstellung).
 import { PROJ, TEAMS } from "../shared/sim.js";
 import { drawGepard } from "./gepard.js";
+import { drawCarrier } from "./carrier.js";
 
 const particles = [];
 const wrecks = [];
@@ -78,18 +79,47 @@ export function spawnEvent(e) {
       burst(x, y, 8, 8, { r: 2.5, grow: 3, life: 2.5, color: "30,30,30", alpha: 0.55, drag: 1.5 });
       break;
     case "sink":
-      sinkAt(x, y, h, e[4] | 0);
+      sinkAt(x, y, h, e[4] | 0, e[5] | 0);
+      break;
+    case "crash":
+      crashAt(x, y, h);
+      break;
+    case "hflaunch":
+      flashes.push({ x, y, r: 4, age: 0, life: 0.15 });
+      for (let i = 0; i < 6; i++) puff(x, y, { vx: -Math.cos(h) * rand(4, 12) + rand(-2, 2), vy: -Math.sin(h) * rand(4, 12) + rand(-2, 2), r: 0.8, grow: 1.6, life: 1.4, color: "220,220,220", alpha: 0.35 });
+      break;
+    case "spark":
+      burst(x, y, 4, 10, { r: 0.4, grow: 0, life: 0.25, color: "255,220,120", alpha: 0.9, glow: true, drag: 3 });
+      break;
+    case "spray":
+      burst(x, y, 3, 3, { r: 0.6, grow: 0.6, life: 0.6, color: "235,248,255", alpha: 0.7, drag: 3 });
+      break;
+    case "flare":
+      // Täuschkörper: helle, fallende Leuchtkugeln seitlich nach hinten
+      for (const side of [-1, 1]) {
+        const a = h + Math.PI + side * 0.9;
+        puff(x, y, { vx: Math.cos(a) * rand(14, 22), vy: Math.sin(a) * rand(14, 22), r: 1.1, grow: -0.4, life: 1.6, color: "255,245,200", alpha: 1, glow: true, drag: 1.2 });
+        puff(x, y, { vx: Math.cos(a) * rand(8, 14), vy: Math.sin(a) * rand(8, 14), r: 1.2, grow: 2, life: 2.5, color: "235,235,235", alpha: 0.35, drag: 1 });
+      }
       break;
   }
 }
 
-export function sinkAt(x, y, h, team = 0) {
-  explosion(x, y, 7);
-  for (let i = 0; i < 6; i++) {
-    const d = rand(-22, 22);
-    setTimeout(() => explosion(x + Math.cos(h) * d, y + Math.sin(h) * d, rand(2, 4)), rand(100, 2200));
+export function sinkAt(x, y, h, team = 0, typeId = 0) {
+  const big = typeId === 1;
+  explosion(x, y, big ? 10 : 7);
+  for (let i = 0; i < (big ? 12 : 6); i++) {
+    const d = rand(-22, 22) * (big ? 3.5 : 1);
+    setTimeout(() => explosion(x + Math.cos(h) * d, y + Math.sin(h) * d, rand(2, 4) * (big ? 1.6 : 1)), rand(100, big ? 3500 : 2200));
   }
-  wrecks.push({ x, y, h, team, age: 0, life: 7, roll: rand(-0.25, 0.25) });
+  wrecks.push({ x, y, h, team, typeId, age: 0, life: big ? 10 : 7, roll: rand(-0.25, 0.25) });
+}
+
+// Hubschrauber stürzt ab: Feuerball, Trümmer, Aufschlag im Wasser
+export function crashAt(x, y, h) {
+  explosion(x, y, 3.5);
+  burst(x, y, 14, 25, { r: 0.5, grow: 0, life: 1.2, color: "40,40,40", alpha: 0.9, drag: 1.5 });
+  setTimeout(() => splash(x + Math.cos(h) * 8, y + Math.sin(h) * 8, 6), 600);
 }
 
 // Abgasspuren der Flugkörper: durchgehende Rauchfahne, die breiter wird und verblasst
@@ -102,7 +132,7 @@ export function emitTrails(projs, dt) {
     while (tr.pts.length && tr.pts[0].age > TRAIL_LIFE) tr.pts.shift();
   }
   for (const q of projs) {
-    if (q.type === PROJ.SHELL) continue;
+    if (q.type === PROJ.SHELL || q.type === PROJ.BULLET) continue;
     let tr = trails.get(q.id);
     if (!tr) trails.set(q.id, (tr = { pts: [], big: q.type === PROJ.EXOCET }));
     tr.alive = true;
@@ -171,7 +201,8 @@ export function drawEffectsBelow(ctx, t) {
     ctx.scale(sc, sc * (1 - k * 0.35));
     ctx.globalAlpha = Math.max(0, 1 - k * 1.1);
     ctx.filter = `brightness(${0.55 - k * 0.3})`;
-    drawGepard(ctx, { t: 0, seed: 1, gun: 0.4, ram: -0.6, exo: [false, false, false, false], flag: TEAMS[w.team].flag });
+    if (w.typeId === 1) drawCarrier(ctx, { t: 0, seed: 1, ram: -0.6, flag: TEAMS[w.team].flag });
+    else drawGepard(ctx, { t: 0, seed: 1, gun: 0.4, ram: -0.6, exo: [false, false, false, false], flag: TEAMS[w.team].flag });
     ctx.filter = "none";
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -310,7 +341,14 @@ export function drawProjectiles(ctx, projs, t, zoom) {
     ctx.save();
     ctx.translate(q.x, q.y);
     ctx.rotate(q.h);
-    if (q.type === PROJ.SHELL) {
+    if (q.type === PROJ.BULLET) {
+      ctx.strokeStyle = "rgba(255,235,150,0.9)";
+      ctx.lineWidth = 0.3 * boost;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-6, 0);
+      ctx.stroke();
+    } else if (q.type === PROJ.SHELL) {
       const g = ctx.createLinearGradient(0, 0, -14, 0);
       g.addColorStop(0, "rgba(255,250,200,1)");
       g.addColorStop(1, "rgba(255,180,60,0)");
@@ -325,7 +363,10 @@ export function drawProjectiles(ctx, projs, t, zoom) {
       const s = 1.3 * boost;
       ctx.scale(s, s);
       if (q.type === PROJ.EXOCET) drawExocetBody(ctx, t);
-      else drawRamBody(ctx, t);
+      else if (q.type === PROJ.HELLFIRE) {
+        ctx.scale(0.65, 0.9);
+        drawRamBody(ctx, t);
+      } else drawRamBody(ctx, t);
     }
     ctx.restore();
   }

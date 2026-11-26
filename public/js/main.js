@@ -6,7 +6,12 @@ import {
   generateMap,
   islandRadius,
   mulberry32,
-  stepBoat,
+  stepEntity,
+  TYPE_BY_ID,
+  isOnLand,
+  harborRect,
+  teamBase,
+  inRect,
   clamp,
   wrapAngle,
   aimAngles,
@@ -18,13 +23,16 @@ import {
 import { drawBases, drawBasesMinimap } from "./base.js";
 import * as radar from "./radar.js";
 import { drawGepard, GEPARD_EXHAUSTS } from "./gepard.js";
+import { drawCarrier, CARRIER_EXHAUSTS } from "./carrier.js";
+import { drawBlackhawk, drawBlackhawkShadow } from "./heli.js";
+import { WEAPON_UI, ABILITY_UI } from "./ui.js";
 import * as combat from "./combat.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("game");
 const ctx = canvas.getContext("2d");
 const map = generateMap();
-const DEF = BOATS.gepard;
+let DEF = BOATS.gepard; // Typ des eigenen Fahrzeugs
 
 // ---------------- Zustand ----------------
 const state = {
@@ -61,13 +69,30 @@ const state = {
   radarView: null, // Geometrie der Radaransicht (für Klick-Lock)
   team: 0, // gewähltes Team
   teams: new Map(), // Spieler-ID -> Team
+  types: new Map(), // Spieler-ID -> Typ
+  myType: "gepard",
+  spawnChoice: "gepard", // Startauswahl im Menü: gepard | carrier | heli:<id>
+  status: null, // letzter /status-Abruf
+  shopOpen: false,
 };
+// Anonymes Konto pro Browser (Geld und gekaufte Schiffe)
+let TOKEN = "";
+try {
+  TOKEN = localStorage.getItem("mkn-token") || "";
+  if (!TOKEN) {
+    TOKEN = crypto.randomUUID();
+    localStorage.setItem("mkn-token", TOKEN);
+  }
+} catch {
+  TOKEN = crypto.randomUUID();
+}
+const typeOfId = (id) => (id === state.myId ? state.myType : state.types.get(id) || "gepard");
+const fmtMoney = (n) => `${Math.floor(n).toLocaleString("de-DE")} Taler`;
 try {
   state.team = localStorage.getItem("mkn-team") === "1" ? 1 : 0;
 } catch {}
 const teamOf = (id) => state.teams.get(id) ?? 0;
 const isFriend = (id) => teamOf(id) === state.team;
-const WEAPON_KEYS = { 1: "gun", 2: "exocet", 3: "ram" };
 
 const keys = new Set();
 const fx = new Map(); // id -> { trail: [], smoke: [], lastTrail: 0 }
@@ -162,10 +187,12 @@ addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   keys.add(k);
   if (k === " " || k === "x") state.throttle = 0;
-  if (WEAPON_KEYS[k]) selectWeapon(WEAPON_KEYS[k]);
-  if (!e.repeat && k === "f" && state.weapon !== "gun") send({ t: "fire", w: state.weapon });
+  if (/^[1-9]$/.test(k) && DEF.weapons[+k - 1]) selectWeapon(DEF.weapons[+k - 1]);
+  if (!e.repeat && k === "f" && !WEAPONS[state.weapon].auto) send({ t: "fire", w: state.weapon });
   if (!e.repeat && k === "r" && state.pred) sendLock();
-  if (!e.repeat && k === "e") activateRadar();
+  if (!e.repeat && k === "e") activateAbility();
+  if (!e.repeat && k === "b") toggleShop();
+  if (k === "escape" && state.shopOpen) toggleShop(false);
   if (["w", "a", "s", "d", " ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) e.preventDefault();
 });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
@@ -193,33 +220,65 @@ function sendLock() {
   send({ t: "lock", x: Math.round(target.x), y: Math.round(target.y) });
 }
 
-function activateRadar() {
+function activateAbility() {
   const info = state.meInfo;
   if (info && (info.ra > 0 || info.rc > 0)) return;
-  send({ t: "ability", a: "radar" });
+  send({ t: "ability" });
 }
 
 canvas.addEventListener("mousedown", (e) => {
   if (e.button === 0 && state.radarK > 0.5 && state.pred) sendLock();
 });
-$("abRadar").addEventListener("click", activateRadar);
 
 function selectWeapon(w) {
   state.weapon = w;
   for (const el of document.querySelectorAll(".wslot")) el.classList.toggle("sel", el.dataset.w === w);
 }
-for (const el of document.querySelectorAll(".wslot")) el.addEventListener("click", () => selectWeapon(el.dataset.w));
+
+// Waffenleiste passend zum eigenen Fahrzeug aufbauen
+function buildWeaponBar() {
+  const bar = $("weapons");
+  const parts = DEF.weapons.map((w, i) => {
+    const u = WEAPON_UI[w];
+    const extra = u.cells ? `<div class="cells" id="w_${w}_c">${"<i></i>".repeat(u.cells)}</div>` : `<div class="wbar"><div id="w_${w}_b"></div></div>`;
+    return `<div class="wslot" data-w="${w}"><kbd>${i + 1}</kbd>${u.icon}<div class="wname">${u.name} <span id="w_${w}_n"></span></div><div class="wsub" id="w_${w}_s">${u.sub}</div>${extra}</div>`;
+  });
+  parts.push(`<div class="agis"><kbd>R</kbd><div class="wname">AGIS</div><div id="lockState">kein Ziel</div></div>`);
+  const ab = ABILITY_UI[DEF.ability];
+  parts.push(
+    `<div class="aslot ready" id="abSlot" title="${ab.title}"><kbd>E</kbd>${ab.icon}<div class="wname">${ab.name}</div><div class="wsub" id="abState">bereit</div><div class="wbar"><div id="abBar"></div></div></div>`
+  );
+  bar.innerHTML = parts.join("");
+  for (const el of bar.querySelectorAll(".wslot")) el.addEventListener("click", () => selectWeapon(el.dataset.w));
+  $("abSlot").addEventListener("click", activateAbility);
+  selectWeapon(DEF.weapons[0]);
+}
+
+function setMyType(type) {
+  state.myType = type;
+  DEF = BOATS[type];
+  $("boatLabel").textContent = DEF.label;
+  $("telegraph").hidden = DEF.kind !== "ship";
+  buildWeaponBar();
+}
 
 function updateControls(dt) {
-  // Geschütz: Dauerfeuer solange F gedrückt (Server prüft Nachladezeit)
-  if (keys.has("f") && state.weapon === "gun" && performance.now() - state.lastFire > 100) {
+  // Geschütz/MG: Dauerfeuer solange F gedrückt (Server prüft Nachladezeit)
+  if (keys.has("f") && WEAPONS[state.weapon].auto && performance.now() - state.lastFire > 80) {
     state.lastFire = performance.now();
-    send({ t: "fire", w: "gun" });
+    send({ t: "fire", w: state.weapon });
   }
   const up = keys.has("w") || keys.has("arrowup");
   const down = keys.has("s") || keys.has("arrowdown");
   const left = keys.has("a") || keys.has("arrowleft");
   const right = keys.has("d") || keys.has("arrowright");
+  if (DEF.kind === "heli") {
+    // Hubschrauber: W vorwärts, S rückwärts, loslassen = schweben
+    state.throttle = up ? 1 : down ? -DEF.maxReverse : 0;
+    const target = (right ? 1 : 0) - (left ? 1 : 0);
+    state.rudder += clamp(target - state.rudder, -5 * dt, 5 * dt);
+    return;
+  }
   if (up) state.throttle = Math.min(1, state.throttle + dt * 0.6);
   if (down) state.throttle = Math.max(-DEF.maxReverse, state.throttle - dt * 0.6);
   // Einrasten auf Stopp beim Durchfahren
@@ -230,14 +289,14 @@ function updateControls(dt) {
 }
 
 // ---------------- Netzwerk ----------------
-function connect(name, team) {
+function connect(name, team, spawn) {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const ws = new WebSocket(`${proto}//${location.host}/ws`);
   state.ws = ws;
   $("status").textContent = "Verbinde …";
   $("play").disabled = true;
 
-  ws.onopen = () => ws.send(JSON.stringify({ t: "join", name, team }));
+  ws.onopen = () => ws.send(JSON.stringify({ t: "join", name, team, spawn, token: TOKEN }));
   ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
   ws.onclose = () => {
     if (state.ws !== ws) return;
@@ -250,11 +309,14 @@ function connect(name, team) {
       $("menu").hidden = false;
       $("play").disabled = false;
       $("play").textContent = dead ? "Neu ablegen!" : "Ablegen!";
+      const verb = dead && dead.heli ? "Abgeschossen" : "Versenkt";
       $("status").textContent = dead
         ? dead.by
-          ? `Versenkt von ${dead.by}. Neues Boot gefällig?`
-          : "Dein Boot wurde versenkt. Neues Boot gefällig?"
+          ? `${verb} von ${dead.by}. Neuer Einsatz gefällig?`
+          : `${verb}. Neuer Einsatz gefällig?`
         : "Verbindung zum Hafen verloren. Erneut ablegen?";
+      toggleShop(false);
+      refreshTeamStatus(true);
     };
     if (dead) setTimeout(showMenu, Math.max(0, 3200 - (performance.now() - dead.time)));
     else showMenu();
@@ -268,10 +330,14 @@ function onMessage(m) {
       state.names.clear();
       state.teams.clear();
       state.team = m.team;
+      state.types.clear();
       for (const p of m.players) {
         state.names.set(p.id, p.name);
         state.teams.set(p.id, p.team);
+        state.types.set(p.id, p.type);
       }
+      setMyType(m.type);
+      if (m.note) showToast(m.note, "warn");
       state.snapshots = [];
       state.pred = null;
       state.history = [];
@@ -290,14 +356,38 @@ function onMessage(m) {
     case "join":
       state.names.set(m.id, m.name);
       state.teams.set(m.id, m.team);
+      state.types.set(m.id, m.type);
       renderPlayerList();
       break;
     case "dead":
-      state.dead = { by: m.by, x: m.x, y: m.y, h: m.h, time: performance.now() };
+      state.dead = { by: m.by, x: m.x, y: m.y, h: m.h, time: performance.now(), heli: BOATS[m.type]?.kind === "heli" };
       state.pred = null;
-      combat.sinkAt(m.x, m.y, m.h, m.team);
+      if (state.dead.heli) combat.crashAt(m.x, m.y, m.h);
+      else combat.sinkAt(m.x, m.y, m.h, m.team, BOATS[m.type]?.typeId ?? 0);
       $("hpFill").style.width = "0%";
       $("hpText").textContent = `0 / ${DEF.hp}`;
+      break;
+    case "retype":
+      if (m.id) state.types.set(m.id, m.type);
+      else {
+        // Eigenes Schiff im Hafen gewechselt
+        setMyType(m.type);
+        state.pred = null;
+        state.history = [];
+        state.throttle = 0;
+        state.rudder = 0;
+        fx.delete(state.myId);
+        toggleShop(false);
+        showToast(`Du fährst jetzt: ${DEF.label}`, "ok");
+      }
+      break;
+    case "reward":
+      showToast(`+${m.a.toLocaleString("de-DE")} Taler · ${m.m}`, "money");
+      break;
+    case "shop":
+      showToast(m.m, m.ok ? "ok" : "warn");
+      if (m.owned && state.meInfo) state.meInfo.own = m.owned;
+      renderShop();
       break;
     case "lockmsg":
       state.lockMsg = m.m;
@@ -326,6 +416,7 @@ function onSnapshot(m) {
   let killsChanged = false;
   for (const p of m.p) {
     players.set(p[0], p);
+    if (p[15] !== undefined) state.types.set(p[0], TYPE_BY_ID[p[15]]);
     if (state.kills.get(p[0]) !== p[10]) {
       state.kills.set(p[0], p[10]);
       state.teams.set(p[0], p[14]);
@@ -355,7 +446,7 @@ function onSnapshot(m) {
   const old = { ...state.pred };
   state.history = state.history.filter((h) => h.s > m.a);
   const p = { ...server };
-  for (const h of state.history) stepBoat(p, h, DEF, map);
+  for (const h of state.history) stepEntity(p, h, DEF, map);
   state.pred = p;
   // Fehler weich ausblenden statt springen
   const dx = old.x - p.x;
@@ -380,7 +471,7 @@ function fixedStep() {
   state.history.push(input);
   if (state.history.length > 120) state.history.shift();
   state.prevPred = { ...state.pred };
-  stepBoat(state.pred, input, DEF, map);
+  stepEntity(state.pred, input, DEF, map);
   if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: "in", ...input, mx: Math.round(state.mouseWorld.x), my: Math.round(state.mouseWorld.y) }));
 }
 
@@ -420,6 +511,7 @@ function interpolatedBoats(br) {
       h: lerpAngle(pa[3], pb[3], t),
       v: lerp(pa[4], pb[4], t),
       th: pb[6],
+      type: TYPE_BY_ID[pb[15] ?? 0],
       aim: pb[8] ?? 0,
       ramAim: pb[9] ?? 0,
       radar: pb[13] === 1,
@@ -450,10 +542,11 @@ function interpolatedProjectiles(br) {
 // daher dreht der Turm nie durch den gesperrten Sektor hinter der Brücke.
 function turretAngles(b, now) {
   const f = fxFor(b.id);
+  const def = BOATS[b.type];
   const dt = f.gunT ? Math.min(0.1, (now - f.gunT) / 1000) : 0;
   f.gunT = now;
-  f.gun = slewTurret(f.gun, clamp(b.aim ?? 0, -DEF.gun.arc, DEF.gun.arc), DEF.gun, dt);
-  f.ram = slewTurret(f.ram, clamp(b.ramAim ?? 0, -DEF.ram.arc, DEF.ram.arc), DEF.ram, dt);
+  if (def.gun) f.gun = slewTurret(f.gun, clamp(b.aim ?? 0, -def.gun.arc, def.gun.arc), def.gun, dt);
+  if (def.ram) f.ram = slewTurret(f.ram, clamp(b.ramAim ?? 0, -def.ram.arc, def.ram.arc), def.ram, dt);
   return f;
 }
 
@@ -469,20 +562,32 @@ function fxFor(id) {
 
 function updateFx(boat, now) {
   const f = fxFor(boat.id);
+  const def = BOATS[boat.type];
   const c = Math.cos(boat.h);
   const s = Math.sin(boat.h);
+  if (def.kind === "heli") {
+    // Abwind des Rotors: Ringe und Gischt auf dem Wasser
+    f.rings = f.rings || [];
+    if (now - (f.lastRing || 0) > 160 && !isOnLand(map, boat.x, boat.y)) {
+      f.lastRing = now;
+      f.rings.push({ x: boat.x + 4, y: boat.y + 6, t: now });
+    }
+    f.rings = f.rings.filter((r) => now - r.t < 1400);
+    f.trail.length = 0;
+    return;
+  }
   if (now - f.lastTrail > 70) {
     f.lastTrail = now;
-    const sx = boat.x - c * (DEF.length / 2 - 1);
-    const sy = boat.y - s * (DEF.length / 2 - 1);
-    f.trail.push({ x: sx, y: sy, nx: -s, ny: c, v: Math.abs(boat.v), t: now });
+    const sx = boat.x - c * (def.length / 2 - 1);
+    const sy = boat.y - s * (def.length / 2 - 1);
+    f.trail.push({ x: sx, y: sy, nx: -s, ny: c, v: Math.abs(boat.v), t: now, w: def.beam / 2.2 });
   }
   while (f.trail.length && now - f.trail[0].t > 9000) f.trail.shift();
 
   const load = clamp(Math.abs(boat.th ?? 0), 0.15, 1);
   if (now - f.lastSmoke > 140 / load) {
     f.lastSmoke = now;
-    for (const [ex, ey] of GEPARD_EXHAUSTS) {
+    for (const [ex, ey] of boat.type === "carrier" ? CARRIER_EXHAUSTS : GEPARD_EXHAUSTS) {
       f.smoke.push({
         x: boat.x + ex * c - ey * s,
         y: boat.y + ex * s + ey * c,
@@ -490,7 +595,7 @@ function updateFx(boat, now) {
         vy: -s * 1.5 + 0.8 + (Math.random() - 0.5),
         t: now,
         life: 2200 + Math.random() * 1200,
-        r: 0.9,
+        r: boat.type === "carrier" ? 1.8 : 0.9,
       });
     }
   }
@@ -499,6 +604,18 @@ function updateFx(boat, now) {
     p.y += p.vy * (1 / 60);
   }
   f.smoke = f.smoke.filter((p) => now - p.t < p.life);
+}
+
+function drawDownwash(f, now) {
+  if (!f.rings) return;
+  for (const r of f.rings) {
+    const k = (now - r.t) / 1400;
+    ctx.strokeStyle = `rgba(230,245,255,${0.35 * (1 - k)})`;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, 3 + k * 14, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 function drawWake(f, now) {
@@ -516,7 +633,7 @@ function drawWake(f, now) {
     const alpha = Math.max(0, 0.42 - age * 0.05) * strength;
     if (alpha <= 0) continue;
     ctx.strokeStyle = `rgba(235,248,255,${alpha})`;
-    ctx.lineWidth = 3 + age * 1.1;
+    ctx.lineWidth = (p.w || 3.5) * 0.85 + age * 1.1;
     ctx.beginPath();
     ctx.moveTo(q.x, q.y);
     ctx.lineTo(p.x, p.y);
@@ -529,7 +646,7 @@ function drawWake(f, now) {
     for (let i = tr.length - 1; i >= 0; i--) {
       const p = tr[i];
       const age = (now - p.t) / 1000;
-      const off = 3.5 + age * p.v * 0.36;
+      const off = (p.w || 3.5) + age * p.v * 0.36;
       const x = p.x + p.nx * off * side;
       const y = p.y + p.ny * off * side;
       if (!started) {
@@ -545,9 +662,12 @@ function drawWake(f, now) {
 }
 
 function drawBowWave(boat, t) {
+  const def = BOATS[boat.type];
   const v = Math.abs(boat.v);
-  if (v < 1.5) return;
-  const k = clamp(v / DEF.maxSpeed, 0, 1);
+  if (v < 1.5 || def.kind !== "ship") return;
+  const k = clamp(v / def.maxSpeed, 0, 1);
+  const L = def.length / 2;
+  const sc = def.beam / 7.8;
   ctx.save();
   ctx.translate(boat.x, boat.y);
   ctx.rotate(boat.h);
@@ -556,15 +676,10 @@ function drawBowWave(boat, t) {
   for (const side of [-1, 1]) {
     for (let j = 0; j < 3; j++) {
       const sp = 0.4 + j * 0.35 + Math.sin(t * 6 + j) * 0.05;
-      ctx.lineWidth = 0.9 - j * 0.2;
+      ctx.lineWidth = (0.9 - j * 0.2) * sc;
       ctx.beginPath();
-      ctx.moveTo(DEF.length / 2 + 0.3, 0);
-      ctx.quadraticCurveTo(
-        DEF.length / 2 - 5,
-        side * (3.9 + sp * k * 1.2),
-        DEF.length / 2 - 12 - j * 7,
-        side * (4.2 + sp * k * 2.6)
-      );
+      ctx.moveTo(L + 0.3, 0);
+      ctx.quadraticCurveTo(L - 5 * sc, side * (3.9 + sp * k * 1.2) * sc, L - (12 + j * 7) * sc, side * (4.2 + sp * k * 2.6) * sc);
       ctx.stroke();
     }
   }
@@ -572,8 +687,8 @@ function drawBowWave(boat, t) {
   if (k > 0.3) {
     ctx.fillStyle = `rgba(255,255,255,${0.25 * k})`;
     for (let i = 0; i < 6; i++) {
-      const jx = -DEF.length / 2 - 1 - Math.random() * 4 * k;
-      const jy = (Math.random() - 0.5) * 6;
+      const jx = -L - 1 - Math.random() * 4 * k * sc;
+      const jy = (Math.random() - 0.5) * 6 * sc;
       ctx.beginPath();
       ctx.arc(jx, jy, 0.6 + Math.random() * 1.4, 0, Math.PI * 2);
       ctx.fill();
@@ -702,9 +817,10 @@ function render(now) {
       h: lerpAngle(pp.h, state.pred.h, a) + state.errH,
       v: lerp(pp.v, state.pred.v, a),
       th: state.throttle,
-      hp: state.myHp ?? 100,
+      type: state.myType,
+      hp: state.myHp ?? DEF.hp,
       prot: state.myProt,
-      radar: !!(state.meInfo && state.meInfo.ra > 0),
+      radar: !!(DEF.ability === "radar" && state.meInfo && state.meInfo.ra > 0),
     };
   }
   const br = bracket(now);
@@ -716,7 +832,7 @@ function render(now) {
 
   const cam = me || state.dead || { x: 0, y: 0 };
   // Radar-Rundumsuche: weich weit herauszoomen
-  const radarOn = !!(me && state.meInfo && state.meInfo.ra > 0);
+  const radarOn = !!(me && DEF.ability === "radar" && state.meInfo && state.meInfo.ra > 0);
   if (radarOn && !state.radarWasOn) {
     state.radarStart = t;
     radar.resetContacts();
@@ -745,6 +861,7 @@ function render(now) {
     state.aimInfo = ai;
     me.aim = ai.gun;
     me.ramAim = ai.ram;
+    me.gunner = Math.atan2(state.mouseWorld.y - me.y, state.mouseWorld.x - me.x) - me.h;
   }
   combat.updateEffects(dtFx);
   combat.emitTrails(projs, dtFx);
@@ -781,6 +898,7 @@ function render(now) {
   for (const b of boats) {
     updateFx(b, now);
     drawWake(fxFor(b.id), now);
+    drawDownwash(fxFor(b.id), now);
   }
 
   drawIslands(view, t);
@@ -788,7 +906,9 @@ function render(now) {
   combat.drawEffectsBelow(ctx, t);
 
   const info = state.meInfo;
-  for (const b of boats) {
+  const ships = boats.filter((b) => BOATS[b.type].kind === "ship");
+  const helis = boats.filter((b) => BOATS[b.type].kind === "heli");
+  for (const b of ships) {
     drawBowWave(b, t);
     const tu = turretAngles(b, now);
     ctx.save();
@@ -801,13 +921,34 @@ function render(now) {
     const fb = fxFor(b.id);
     fb.navAng = (fb.navAng ?? (b.id * 1.7) % 6.28) + dtFx * (b.radar ? 9 : 2.6);
     fb.domeAng = (fb.domeAng ?? 0) + dtFx * (b.radar ? 3 : 0.45);
-    drawGepard(ctx, { t, seed: b.id * 7919, gun: tu.gun, ram: tu.ram, exo, radarAngle: fb.navAng, domeAngle: fb.domeAng, flag: TEAMS[teamOf(b.id)].flag });
+    const flag = TEAMS[teamOf(b.id)].flag;
+    if (b.type === "carrier") drawCarrier(ctx, { t, seed: b.id * 7919, ram: tu.ram, radarAngle: fb.navAng * 0.5, flag });
+    else drawGepard(ctx, { t, seed: b.id * 7919, gun: tu.gun, ram: tu.ram, exo, radarAngle: fb.navAng, domeAngle: fb.domeAng, flag });
     ctx.restore();
-    combat.damageFx(b, dtFx);
+    combat.damageFx({ ...b, hp: (b.hp / BOATS[b.type].hp) * 100 }, dtFx);
   }
-  for (const b of boats) drawSmoke(fxFor(b.id), now);
+  for (const b of ships) drawSmoke(fxFor(b.id), now);
   combat.drawProjectiles(ctx, projs, t, zoom);
   combat.drawEffectsAbove(ctx);
+
+  // Hubschrauber fliegen über allem: erst Schatten auf dem Wasser, dann der Hubschrauber
+  for (const b of helis) {
+    ctx.save();
+    ctx.translate(b.x + 5, b.y + 8);
+    ctx.rotate(b.h);
+    drawBlackhawkShadow(ctx);
+    ctx.restore();
+  }
+  for (const b of helis) {
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.h);
+    if (b.prot) ctx.globalAlpha = 0.55 + Math.sin(t * 10) * 0.25;
+    const hf = b.id === state.myId && info ? info.hf : 8;
+    drawBlackhawk(ctx, { t, seed: b.id * 7919, hf, gunner: b.id === state.myId ? me.gunner : Math.PI / 2, flag: TEAMS[teamOf(b.id)].flag });
+    ctx.restore();
+    combat.damageFx({ ...b, hp: (b.hp / BOATS.blackhawk.hp) * 100 }, dtFx);
+  }
 
   // AGIS-Lock
   if (me && info && info.l && rk < 0.5) {
@@ -829,9 +970,10 @@ function render(now) {
   }
   if (rk < 0.6) for (const b of boats) {
     const sx = w / 2 + (b.x - cam.x) * zoom;
-    const sy = h / 2 + (b.y - cam.y) * zoom - Math.max(24, DEF.length * 0.55 * zoom);
+    const bdef = BOATS[b.type];
+    const sy = h / 2 + (b.y - cam.y) * zoom - Math.max(24, Math.max(bdef.length * 0.55, bdef.beam * 0.6) * zoom);
     drawNameTag(state.names.get(b.id) || "?", sx, sy - 8, b.id === state.myId, teamOf(b.id));
-    drawHpBar(sx, sy - 4, b.hp);
+    drawHpBar(sx, sy - 4, b.hp / bdef.hp);
   }
   // Zeiger-Hinweis: Geschütz kann dort nicht hin
   if (me && state.mouse && state.weapon === "gun" && state.aimInfo && !state.aimInfo.gunOk) {
@@ -854,9 +996,10 @@ function render(now) {
     ctx.font = "800 54px system-ui, sans-serif";
     ctx.lineWidth = 6;
     ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    ctx.strokeText("VERSENKT", w / 2, h * 0.3);
+    const word = state.dead.heli ? "ABGESCHOSSEN" : "VERSENKT";
+    ctx.strokeText(word, w / 2, h * 0.3);
     ctx.fillStyle = "#ff5a4e";
-    ctx.fillText("VERSENKT", w / 2, h * 0.3);
+    ctx.fillText(word, w / 2, h * 0.3);
     if (state.dead.by) {
       ctx.font = "600 20px system-ui, sans-serif";
       ctx.lineWidth = 4;
@@ -871,9 +1014,9 @@ function render(now) {
   drawMinimap(me, others);
 }
 
-function drawHpBar(x, y, hp) {
+function drawHpBar(x, y, frac) {
   const W = 56;
-  const k = clamp(hp / DEF.hp, 0, 1);
+  const k = clamp(frac, 0, 1);
   ctx.fillStyle = "rgba(0,0,0,0.55)";
   ctx.fillRect(x - W / 2 - 1, y - 1, W + 2, 6);
   ctx.fillStyle = k > 0.6 ? "#5fd35f" : k > 0.3 ? "#f0c330" : "#ef4b3a";
@@ -885,7 +1028,16 @@ let hudTick = 0;
 function updateHud(me) {
   if (++hudTick % 4) return;
   updateWeaponBar();
-  updateRadarHud();
+  updateAbilityHud();
+  $("money").textContent = fmtMoney(state.meInfo ? state.meInfo.$ : 0);
+  if (state.shopOpen && state.meInfo && state.meInfo.$ !== state.shopMoney) {
+    state.shopMoney = state.meInfo.$;
+    renderShop();
+  }
+  // Schiffsladen-Knopf nur im eigenen Hafen
+  const inHarbor = DEF.kind === "ship" && inRect(harborRect(teamBase(state.team)), me.x, me.y);
+  $("shopBtn").hidden = !inHarbor;
+  if (!inHarbor && state.shopOpen) toggleShop(false);
   $("hpFill").style.width = `${clamp(me.hp / DEF.hp, 0, 1) * 100}%`;
   $("hpText").textContent = `${Math.max(0, Math.ceil(me.hp))} / ${DEF.hp}`;
   $("speed").textContent = `${(me.v * MS_TO_KN).toFixed(1)} kn`;
@@ -893,6 +1045,7 @@ function updateHud(me) {
   $("heading").textContent = `${String(deg).padStart(3, "0")}°`;
   $("pos").textContent = `${Math.round(me.x)} / ${Math.round(-me.y)}`;
   $("ping").textContent = state.ping ? `${Math.round(state.ping)} ms` : "–";
+  if (DEF.kind !== "ship") return;
   const span = 1 + DEF.maxReverse;
   const zeroPct = (1 / span) * 100;
   const thPct = ((1 - state.throttle) / span) * 100;
@@ -908,19 +1061,43 @@ function updateHud(me) {
 function updateWeaponBar() {
   const info = state.meInfo;
   if (!info) return;
-  const setBar = (id, k) => ($(id).style.width = `${clamp(k, 0, 1) * 100}%`);
-  setBar("gunReload", 1 - info.g);
-  $("gunState").textContent = info.g > 0 ? "lädt" : state.aimInfo && !state.aimInfo.gunOk ? "toter Winkel" : "bereit";
-  const cells = document.querySelectorAll("#exoCells i");
-  let ready = 0;
-  info.x.forEach((v, i) => {
-    if (v <= 0) ready++;
-    cells[i].style.setProperty("--k", `${(1 - v) * 100}%`);
-    cells[i].classList.toggle("ready", v <= 0);
-  });
-  $("exoCount").textContent = `${ready}/4`;
-  $("ramCount").textContent = `${info.r}/${WEAPONS.ram.magazine}`;
-  setBar("ramReload", info.r >= WEAPONS.ram.magazine ? 1 : info.rr);
+  const setBar = (id, k) => {
+    const el = $(id);
+    if (el) el.style.width = `${clamp(k, 0, 1) * 100}%`;
+  };
+  const setText = (id, txt) => {
+    const el = $(id);
+    if (el && el.textContent !== txt) el.textContent = txt;
+  };
+  const setCells = (id, ready, partial) => {
+    const cells = document.querySelectorAll(`#${id} i`);
+    cells.forEach((c, i) => {
+      const k = typeof partial === "function" ? partial(i) : i < ready ? 1 : i === ready ? partial : 0;
+      c.style.setProperty("--k", `${k * 100}%`);
+      c.classList.toggle("ready", k >= 1);
+    });
+  };
+  const lockedShip = info.l && info.lt >= 1 && BOATS[typeOfId(info.l)].kind === "ship";
+  for (const w of DEF.weapons) {
+    if (w === "gun") {
+      setBar("w_gun_b", 1 - info.g);
+      setText("w_gun_s", info.g > 0 ? "lädt" : state.aimInfo && !state.aimInfo.gunOk ? "toter Winkel" : "bereit");
+    } else if (w === "mg") {
+      setBar("w_mg_b", 1 - info.mg);
+    } else if (w === "exocet") {
+      const ready = info.x.filter((v) => v <= 0).length;
+      setCells("w_exocet_c", 0, (i) => 1 - info.x[i]);
+      setText("w_exocet_n", `${ready}/4`);
+      setText("w_exocet_s", lockedShip ? "→ Lock-Ziel" : "→ Mauszeiger");
+    } else if (w === "ram") {
+      setText("w_ram_n", `${info.r}/${info.rm}`);
+      setBar("w_ram_b", info.r >= info.rm ? 1 : info.rr);
+    } else if (w === "hellfire") {
+      setCells("w_hellfire_c", info.hf, info.hr);
+      setText("w_hellfire_n", `${info.hf}/${WEAPONS.hellfire.count}`);
+      setText("w_hellfire_s", lockedShip ? "→ Lock-Ziel" : "→ Mauszeiger");
+    }
+  }
   const lock = $("lockState");
   const tName = info.l ? state.names.get(info.l) || "?" : "";
   const recent = performance.now() - state.lockMsgT < 2500;
@@ -934,33 +1111,122 @@ function updateWeaponBar() {
     lock.textContent = recent ? state.lockMsg : "kein Ziel";
     lock.className = recent ? "msg" : "";
   }
-  $("exoMode").textContent = info.l && info.lt >= 1 ? "→ Lock-Ziel" : "→ Mauszeiger";
 }
 
-function updateRadarHud() {
+function updateAbilityHud() {
   const info = state.meInfo;
   if (!info) return;
-  const A = ABILITIES.radar;
-  const slot = $("abRadar");
+  const A = ABILITIES[DEF.ability];
+  const slot = $("abSlot");
   const banner = $("radarBanner");
+  const isRadar = DEF.ability === "radar";
   if (info.ra > 0) {
-    $("radarState").textContent = `aktiv ${info.ra.toFixed(1)} s`;
-    $("radarBar").style.width = `${(info.ra / A.duration) * 100}%`;
+    $("abState").textContent = `aktiv ${info.ra.toFixed(1)} s`;
+    $("abBar").style.width = `${(info.ra / A.duration) * 100}%`;
     slot.className = "aslot active";
-    banner.hidden = false;
-    $("radarTime").textContent = `${info.ra.toFixed(1)} s`;
-    $("radarBannerBar").style.width = `${(info.ra / A.duration) * 100}%`;
+    banner.hidden = !isRadar;
+    if (isRadar) {
+      $("radarTime").textContent = `${info.ra.toFixed(1)} s`;
+      $("radarBannerBar").style.width = `${(info.ra / A.duration) * 100}%`;
+    }
   } else {
     banner.hidden = true;
     if (info.rc > 0) {
-      $("radarState").textContent = `lädt ${Math.ceil(info.rc)} s`;
-      $("radarBar").style.width = `${(1 - info.rc / A.cooldown) * 100}%`;
+      $("abState").textContent = `lädt ${Math.ceil(info.rc)} s`;
+      $("abBar").style.width = `${(1 - info.rc / A.cooldown) * 100}%`;
       slot.className = "aslot cooldown";
     } else {
-      $("radarState").textContent = "bereit";
-      $("radarBar").style.width = "100%";
+      $("abState").textContent = "bereit";
+      $("abBar").style.width = "100%";
       slot.className = "aslot ready";
     }
+  }
+}
+
+// ---------------- Meldungen (Geld, Laden) ----------------
+function showToast(text, kind = "ok") {
+  const box = $("toasts");
+  const el = document.createElement("div");
+  el.className = `toast ${kind}`;
+  el.textContent = text;
+  box.prepend(el);
+  while (box.children.length > 5) box.lastChild.remove();
+  setTimeout(() => el.classList.add("out"), 2600);
+  setTimeout(() => el.remove(), 3200);
+}
+
+// ---------------- Schiffsladen ----------------
+function toggleShop(open = !state.shopOpen) {
+  if (open && $("shopBtn").hidden) return;
+  state.shopOpen = open;
+  $("shop").hidden = !open;
+  if (open) renderShop();
+}
+$("shopBtn").addEventListener("click", () => toggleShop());
+$("shopClose").addEventListener("click", () => toggleShop(false));
+
+function drawTypePreview(c, type, t) {
+  const g = c.getContext("2d");
+  const W = c.width;
+  const H = c.height;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  const bg = g.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#1b5f92");
+  bg.addColorStop(1, "#124a74");
+  g.fillStyle = bg;
+  g.fillRect(0, 0, W, H);
+  const def = BOATS[type];
+  const s = Math.min((W * 0.86) / def.length, (H * 0.8) / Math.max(def.beam, 8));
+  g.setTransform(s, 0, 0, s, W / 2, H / 2);
+  const flag = TEAMS[state.team].flag;
+  if (type === "carrier") drawCarrier(g, { t, seed: 99, flag });
+  else if (type === "blackhawk") {
+    g.save();
+    g.translate(2, 3);
+    drawBlackhawkShadow(g, 0.25);
+    g.restore();
+    drawBlackhawk(g, { t, seed: 99, flag });
+  } else drawGepard(g, { t, seed: 99, flag });
+}
+
+function renderShop() {
+  if (!state.shopOpen) return;
+  const info = state.meInfo;
+  const money = info ? info.$ : 0;
+  const owned = info ? info.own : ["gepard"];
+  $("shopMoney").textContent = fmtMoney(money);
+  const box = $("shopItems");
+  box.replaceChildren();
+  for (const [type, def] of Object.entries(BOATS)) {
+    const card = document.createElement("div");
+    card.className = "shopitem";
+    const c = document.createElement("canvas");
+    c.width = 300;
+    c.height = 110;
+    c.dataset.type = type;
+    const title = document.createElement("b");
+    title.textContent = def.label;
+    const stats = document.createElement("small");
+    const kn = Math.round(def.maxSpeed * MS_TO_KN);
+    stats.textContent = `Level ${def.level} · ${def.hp} HP · ${kn} kn · ${def.weapons.map((w) => WEAPON_UI[w].name).join(", ")}`;
+    const btn = document.createElement("button");
+    if (def.kind === "heli") {
+      btn.textContent = "Start über Träger";
+      btn.disabled = true;
+      stats.textContent += " · startet im Startmenü auf einem Träger deines Teams";
+    } else if (type === state.myType) {
+      btn.textContent = "Aktuelles Schiff";
+      btn.disabled = true;
+    } else if (owned.includes(type)) {
+      btn.textContent = "Auswählen";
+      btn.onclick = () => send({ t: "switch", ship: type });
+    } else {
+      btn.textContent = `Kaufen · ${fmtMoney(def.price)}`;
+      btn.disabled = money < def.price;
+      btn.onclick = () => send({ t: "buy", ship: type });
+    }
+    card.append(c, title, stats, btn);
+    box.appendChild(card);
   }
 }
 
@@ -1031,6 +1297,7 @@ const mmBase = (() => {
 let mmTick = 0;
 function drawMinimap(me, others) {
   if (++mmTick % 3) return;
+  const helis = new Set(others.filter((o) => BOATS[o.type].kind === "heli").map((o) => o.id));
   const W = mm.width;
   mctx.setTransform(1, 0, 0, 1, 0, 0);
   mctx.clearRect(0, 0, W, W);
@@ -1040,7 +1307,7 @@ function drawMinimap(me, others) {
   const info = state.meInfo;
   const t = performance.now() / 1000;
   // Radar-Rundumsuche: Reichweitenkreis und Strahl
-  if (me && info && info.ra > 0) {
+  if (me && info && info.ra > 0 && DEF.ability === "radar") {
     const R = ABILITIES.radar.lockRange * s;
     const a = radar.sweepAngle(t);
     mctx.fillStyle = "rgba(0,40,20,0.35)";
@@ -1060,9 +1327,15 @@ function drawMinimap(me, others) {
   for (const o of others) {
     if (o.id === lockId) continue;
     mctx.fillStyle = isFriend(o.id) ? "#8fe3ff" : "#ff5a4e";
-    mctx.beginPath();
-    mctx.arc(toM(o.x), toM(o.y), 2.5, 0, Math.PI * 2);
-    mctx.fill();
+    if (helis.has(o.id)) {
+      // Hubschrauber als kleines Kreuz
+      mctx.fillRect(toM(o.x) - 3, toM(o.y) - 0.8, 6, 1.6);
+      mctx.fillRect(toM(o.x) - 0.8, toM(o.y) - 3, 1.6, 6);
+    } else {
+      mctx.beginPath();
+      mctx.arc(toM(o.x), toM(o.y), o.type === "carrier" ? 3.8 : 2.5, 0, Math.PI * 2);
+      mctx.fill();
+    }
   }
   // Gelocktes Ziel: rot mit Klammern und Peillinie (gelb während der Aufschaltung)
   const lt = lockId ? others.find((o) => o.id === lockId) : null;
@@ -1171,11 +1444,14 @@ function renderMenuBackground(now) {
 
 // ---------------- Menü + Vorschau ----------------
 const pv = $("preview");
-const pctx = pv.getContext("2d");
-const previewPattern = pctx.createPattern(waterTile, "repeat");
+function choiceType() {
+  return state.spawnChoice === "carrier" ? "carrier" : state.spawnChoice.startsWith("heli") ? "blackhawk" : "gepard";
+}
+
 function drawPreview(now) {
-  if ($("menu").hidden) return;
   const t = now / 1000;
+  if (state.shopOpen) for (const c of document.querySelectorAll("#shopItems canvas")) drawTypePreview(c, c.dataset.type, t);
+  if ($("menu").hidden) return;
   const dpr = Math.min(devicePixelRatio || 1, 2);
   const W = 560 * dpr;
   const H = 150 * dpr;
@@ -1183,29 +1459,7 @@ function drawPreview(now) {
     pv.width = W;
     pv.height = H;
   }
-  pctx.setTransform(1, 0, 0, 1, 0, 0);
-  const g = pctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, "#1b5f92");
-  g.addColorStop(1, "#124a74");
-  pctx.fillStyle = g;
-  pctx.fillRect(0, 0, W, H);
-  const s = 8.4 * dpr;
-  pctx.setTransform(s, 0, 0, s, W / 2, H / 2);
-  previewPattern.setTransform(new DOMMatrix().translate(-t * 12, 0).scale(0.06));
-  pctx.fillStyle = previewPattern;
-  pctx.fillRect(-40, -12, 80, 24);
-  // stilisierte Bugwelle/Kielwasser in der Vorschau
-  pctx.strokeStyle = "rgba(240,250,255,0.5)";
-  pctx.lineWidth = 0.5;
-  for (const side of [-1, 1]) {
-    pctx.beginPath();
-    pctx.moveTo(29, 0);
-    pctx.quadraticCurveTo(22, side * 4.6, 10, side * 6.5);
-    pctx.stroke();
-  }
-  pctx.fillStyle = "rgba(235,248,255,0.35)";
-  pctx.fillRect(-40, -2.2, 11.5, 4.4);
-  drawGepard(pctx, { t, seed: 4242, flag: TEAMS[state.team].flag });
+  drawTypePreview(pv, choiceType(), t);
 }
 
 const nameInput = $("name");
@@ -1223,7 +1477,7 @@ $("joinForm").addEventListener("submit", (e) => {
   } catch {}
   if (state.ws) state.ws.close();
   fx.clear();
-  connect(name, state.team);
+  connect(name, state.team, state.spawnChoice);
   nameInput.blur();
 });
 
@@ -1231,6 +1485,47 @@ $("joinForm").addEventListener("submit", (e) => {
 function selectTeam(team) {
   state.team = team;
   for (const el of document.querySelectorAll(".teamcard")) el.classList.toggle("sel", +el.dataset.team === team);
+  renderSpawnOptions();
+}
+
+// Startauswahl: Schnellboot, Hubschrauberträger (wenn gekauft), Black Hawk (wenn Träger im Team)
+function renderSpawnOptions() {
+  const box = $("spawnOpts");
+  if (!box) return;
+  const st = state.status;
+  const owned = st && st.account ? st.account.owned : ["gepard"];
+  const carriers = st ? st.teams[state.team].carriers.filter((c) => c.free > 0) : [];
+  const opts = [
+    { key: "gepard", label: "Schnellboot", sub: "Level 1", ok: true },
+    {
+      key: "carrier",
+      label: "Hubschrauberträger",
+      sub: owned.includes("carrier") ? "gekauft" : `im Laden · ${fmtMoney(BOATS.carrier.price)}`,
+      ok: owned.includes("carrier"),
+    },
+    ...(carriers.length
+      ? carriers.map((c) => ({ key: `heli:${c.id}`, label: "Black Hawk", sub: `auf Träger von ${c.name} · ${c.free} frei`, ok: true }))
+      : [{ key: "heli", label: "Black Hawk", sub: "kein Träger im Team", ok: false }]),
+  ];
+  if (!opts.some((o) => o.key === state.spawnChoice && o.ok)) state.spawnChoice = "gepard";
+  box.replaceChildren();
+  for (const o of opts) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "spawnopt" + (o.key === state.spawnChoice ? " sel" : "");
+    b.disabled = !o.ok;
+    const l = document.createElement("b");
+    l.textContent = o.label;
+    const sub = document.createElement("small");
+    sub.textContent = o.sub;
+    b.append(l, sub);
+    b.onclick = () => {
+      state.spawnChoice = o.key;
+      renderSpawnOptions();
+    };
+    box.appendChild(b);
+  }
+  $("menuMoney").textContent = st && st.account ? `Konto: ${fmtMoney(st.account.money)}` : "";
 }
 for (const el of document.querySelectorAll(".teamcard")) {
   const team = +el.dataset.team;
@@ -1241,17 +1536,22 @@ for (const el of document.querySelectorAll(".teamcard")) {
 }
 selectTeam(state.team);
 
-async function refreshTeamStatus() {
-  if (!$("menu").hidden) {
+let statusTimer = 0;
+async function refreshTeamStatus(once) {
+  if (!$("menu").hidden || once) {
     try {
-      const r = await fetch("/status", { cache: "no-store" });
-      const { teams } = await r.json();
-      teams.forEach((tm, i) => {
-        $(`tcount${i}`).textContent = `${tm.players} ${tm.players === 1 ? "Schiff" : "Schiffe"} · ${tm.kills} ⚓`;
+      const r = await fetch(`/status?token=${encodeURIComponent(TOKEN)}`, { cache: "no-store" });
+      state.status = await r.json();
+      state.status.teams.forEach((tm, i) => {
+        $(`tcount${i}`).textContent = `${tm.players} ${tm.players === 1 ? "Einheit" : "Einheiten"} · ${tm.kills} ⚓`;
       });
+      renderSpawnOptions();
     } catch {}
   }
-  setTimeout(refreshTeamStatus, 3000);
+  if (!once) {
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(refreshTeamStatus, 3000);
+  }
 }
 refreshTeamStatus();
 
