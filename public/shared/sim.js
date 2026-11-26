@@ -3,191 +3,271 @@
 
 export const TICK_RATE = 20;
 export const DT = 1 / TICK_RATE;
-export const WORLD_SIZE = 6000;
+export const WORLD_SIZE = 10000;
 export const MAP_SEED = 48143;
 export const MAX_NAME = 16;
 
-// Fahrzeugtypen. kind: "ship" (fährt auf dem Wasser) oder "heli" (fliegt über alles hinweg).
+// Fahrzeugtypen. kind: "ship" (fährt), "heli" (schwebt) oder "drone" (fliegt, Mindestgeschwindigkeit).
+// team: 0 = Maiskolbistan (deutsch/europäisch), 1 = Paprikistan (amerikanisch).
 // weapons: Reihenfolge = Tasten 1, 2, 3 …; ability: Fähigkeit auf Taste E.
+// sensor: Erfassungsreichweite (m), sig: Signatur (wie gut man selbst entdeckt wird).
+const DEG = Math.PI / 180;
 export const BOATS = {
+  // ---------------- Maiskolbistan ----------------
   gepard: {
-    typeId: 0,
-    kind: "ship",
-    label: "Schnellboot Gepard (Kl. 143A)",
-    short: "Schnellboot",
-    price: 0,
-    weapons: ["gun", "exocet", "ram"],
-    ability: "radar",
-    level: 1,
-    length: 57.6,
-    beam: 7.8,
-    maxSpeed: 20.6, // ~40 kn
-    maxReverse: 0.3, // Anteil von maxSpeed
-    accel: 2.4,
-    decel: 3.2,
-    turnRate: 0.32, // rad/s bei Volllast
-    // 76-mm-Turm: Position (m vor Mitte), Schwenkbereich ±arc (hinter der Brücke gesperrt), Schwenkgeschw. rad/s
-    gun: { x: 16.5, arc: (150 * Math.PI) / 180, speed: 1.4 },
-    // RAM-Starter am Heck: Ruhestellung nach achtern, Schwenkbereich ±arc um achtern
-    ram: { x: -21.5, arc: (150 * Math.PI) / 180, speed: 1.8 },
-    hp: 100,
-  },
-  carrier: {
-    typeId: 1,
-    kind: "ship",
-    label: "Hubschrauberträger Klasse Ähre",
-    short: "Hubschrauberträger",
-    price: 6000,
-    weapons: ["ram"],
-    ability: "radar",
-    level: 2,
-    length: 182,
-    beam: 30,
-    maxSpeed: 10.3, // ~20 kn
-    maxReverse: 0.25,
-    accel: 0.7,
-    decel: 1.0,
-    turnRate: 0.085,
-    // RAM-Starter am Heck (feuert) und am Bug (schwenkt mit)
-    ram: { x: -84, arc: (150 * Math.PI) / 180, speed: 1.6 },
-    hp: 400,
-    // Landepunkte auf dem Flugdeck (Bootskoordinaten); hier starten Black Hawks des Teams
-    heliSpots: [
-      { x: 64, y: -4 },
-      { x: 38, y: -4 },
-      { x: 12, y: -4 },
-      { x: -14, y: -4 },
-      { x: -40, y: -4 },
-      { x: -66, y: -4 },
-    ],
-  },
-  blackhawk: {
-    typeId: 2,
-    kind: "heli",
-    label: "UH-60 Black Hawk",
-    short: "Black Hawk",
-    price: 0,
-    weapons: ["mg", "hellfire"],
-    ability: "flares",
-    level: 2,
-    length: 19.8,
-    beam: 16.4, // Rotordurchmesser
-    maxSpeed: 72, // ~140 kn
-    maxReverse: 0.35,
-    accel: 16,
-    decel: 22,
-    turnRate: 1.5,
-    hitRadius: 8,
-    hp: 40,
-  },
-};
-export const TYPE_BY_ID = ["gepard", "carrier", "blackhawk"];
-
-// Geld (Taler): Belohnungen je nach Typ des versenkten Gegners
-export const ECONOMY = {
-  kill: { gepard: 1000, carrier: 3000, blackhawk: 600 },
-  assistShare: 0.4, // Anteil der Abschussprämie für Assists (Schaden in den letzten 30 s)
-  assistWindow: 30,
-  perDamage: 5, // Taler je verursachtem Trefferpunkt
-};
-
-// Waffen und Flugkörper. Geschwindigkeiten sind für das Spiel verkürzt.
-export const WEAPONS = {
-  gun: {
-    label: "76 mm OTO Melara",
-    auto: true, // Dauerfeuer solange F gedrückt
-    reload: 0.6, // s pro Schuss
-    speed: 320, // m/s
-    range: 2200,
-    damage: 6,
-    spread: 0.012,
-  },
-  exocet: {
-    label: "MM38 Exocet",
-    cells: 4,
-    reload: 15, // s pro Zelle
-    interval: 0.6, // min. Abstand zwischen Starts
-    speed: 140,
-    turn: 1.0, // rad/s
-    range: 4200,
-    damage: 40,
-    seekerRange: 1200,
-    seekerCone: 0.6, // rad halber Öffnungswinkel
-    // Zellen: Position (Bootskoordinaten) und Startrichtung relativ zum Bug
-    launchers: [
+    typeId: 0, team: 0, kind: "ship", level: 1, price: 0,
+    label: "Schnellboot Gepard (Kl. 143A)", short: "Schnellboot Gepard",
+    weapons: ["gun76", "exocet", "ram"], ability: "radar",
+    length: 57.6, beam: 7.8, maxSpeed: 20.6, maxReverse: 0.3, accel: 2.4, decel: 3.2, turnRate: 0.32,
+    gun: { x: 16.5, arc: 150 * DEG, speed: 1.4 },
+    ram: { x: -21.5, arc: 150 * DEG, speed: 1.8 },
+    ssm: [
       { x: -6.4, y: -1.5, a: -0.32 },
       { x: -6.0, y: -0.5, a: -0.32 },
       { x: -6.0, y: 0.5, a: 0.32 },
       { x: -6.4, y: 1.5, a: 0.32 },
     ],
+    hp: 100, sensor: 2200, sig: 0.8,
   },
-  ram: {
-    label: "RAM Luftabwehr",
-    magazine: 21,
-    reload: 4, // s pro nachgeladenem Flugkörper
-    interval: 0.35,
-    speed: 230,
-    turn: 3.2,
-    range: 1800,
-    damage: 6, // gegen Schiffe
-    seekerRange: 1500,
-    pk: 0.7, // Abfangwahrscheinlichkeit
-  },
-  mg: {
-    label: "M240 Türschütze",
-    auto: true,
-    reload: 0.09,
-    speed: 520,
-    range: 800,
-    damage: 0.6, // gegen Schiffe
-    heliDamage: 1.2,
-    spread: 0.035,
-  },
-  hellfire: {
-    label: "AGM-114 Hellfire",
-    count: 8,
-    reload: 6, // s pro nachgeladenem Flugkörper
-    interval: 0.4,
-    speed: 210,
-    turn: 2.4,
-    range: 3000,
-    damage: 14,
-    seekerRange: 900,
-    seekerCone: 0.55,
-    // Startschienen an den Stummelflügeln (links/rechts abwechselnd)
-    rails: [
-      { x: -1.2, y: -3.4 },
-      { x: -1.2, y: 3.4 },
+  k130: {
+    typeId: 3, team: 0, kind: "ship", level: 2, price: 4000,
+    label: "Korvette Braunschweig (Kl. 130)", short: "Korvette Braunschweig",
+    weapons: ["gun76", "rbs15", "ram"], ability: "radar",
+    length: 89, beam: 13.3, maxSpeed: 13.4, maxReverse: 0.3, accel: 1.5, decel: 2.2, turnRate: 0.2,
+    gun: { x: 28, arc: 150 * DEG, speed: 1.4 },
+    ram: { x: -30, arc: 150 * DEG, speed: 1.8 },
+    ssm: [
+      { x: -12, y: -2.6, a: -0.5 },
+      { x: -15, y: -2.6, a: -0.5 },
+      { x: -12, y: 2.6, a: 0.5 },
+      { x: -15, y: 2.6, a: 0.5 },
     ],
+    mags: { ram: 42 },
+    hp: 180, sensor: 2600, sig: 0.9,
   },
-  lock: {
-    range: 3000, // Radar-Erfassungsreichweite
-    breakRange: 5500, // ein Lock hält bis hierhin (auch nach Ende der Radar-Fähigkeit)
-    time: 1.2, // s bis zur Aufschaltung
-    pick: 140, // m um den Mauszeiger
+  f124: {
+    typeId: 4, team: 0, kind: "ship", level: 3, price: 12000,
+    label: "Fregatte Sachsen (F124)", short: "Fregatte Sachsen",
+    weapons: ["gun76", "harpoon", "sm2", "ram"], ability: "radar",
+    length: 143, beam: 17.4, maxSpeed: 14.9, maxReverse: 0.3, accel: 1.1, decel: 1.6, turnRate: 0.14,
+    gun: { x: 52, arc: 150 * DEG, speed: 1.4 },
+    ram: { x: -40, arc: 150 * DEG, speed: 1.8 },
+    vls: { x: 38, y: 0 },
+    ssm: [
+      { x: 2, y: -3.2, a: -0.55 }, { x: 0, y: -3.2, a: -0.55 }, { x: -2, y: -3.2, a: -0.55 }, { x: -4, y: -3.2, a: -0.55 },
+      { x: 2, y: 3.2, a: 0.55 }, { x: 0, y: 3.2, a: 0.55 }, { x: -2, y: 3.2, a: 0.55 }, { x: -4, y: 3.2, a: 0.55 },
+    ],
+    hp: 320, sensor: 3200, sig: 1.0,
+  },
+  carrier: {
+    typeId: 1, team: 0, kind: "ship", level: 2, price: 6000,
+    label: "Hubschrauberträger Klasse Ähre", short: "Hubschrauberträger Ähre",
+    weapons: ["ram"], ability: "radar", heliType: "nh90", drawScale: 1,
+    length: 182, beam: 30, maxSpeed: 10.3, maxReverse: 0.25, accel: 0.7, decel: 1.0, turnRate: 0.085,
+    ram: { x: -84, arc: 150 * DEG, speed: 1.6 },
+    mags: { ram: 42 },
+    hp: 400, sensor: 2800, sig: 1.3,
+    heliSpots: [64, 38, 12, -14, -40, -66].map((x) => ({ x, y: -4 })),
+  },
+  nh90: {
+    typeId: 5, team: 0, kind: "heli", level: 2, price: 0,
+    label: "NH90 NFH", short: "NH90",
+    weapons: ["mg", "marte"], ability: "flares",
+    length: 19.6, beam: 16.3, maxSpeed: 74, maxReverse: 0.35, accel: 16, decel: 22, turnRate: 1.45,
+    hitRadius: 8, hp: 45, sensor: 1600, sig: 0.6,
+  },
+  heron: {
+    typeId: 6, team: 0, kind: "drone", level: 1, price: 0,
+    label: "Aufklärungsdrohne Heron TP", short: "Heron TP",
+    weapons: ["armiger"], ability: "radar",
+    length: 14, beam: 26, maxSpeed: 62, minSpeed: 26, maxReverse: 0, accel: 10, decel: 10, turnRate: 0.55,
+    hitRadius: 9, hp: 25, sensor: 3400, sig: 0.45,
+  },
+  // ---------------- Paprikistan ----------------
+  cyclone: {
+    typeId: 7, team: 1, kind: "ship", level: 1, price: 0,
+    label: "Patrouillenboot Cyclone (PC-1)", short: "Patrouillenboot Cyclone",
+    weapons: ["gun25", "griffin", "stinger"], ability: "radar",
+    length: 54.6, beam: 7.9, maxSpeed: 18, maxReverse: 0.3, accel: 2.6, decel: 3.4, turnRate: 0.34,
+    gun: { x: 14, arc: 150 * DEG, speed: 2.0 },
+    ram: { x: -16, arc: 160 * DEG, speed: 2.2 },
+    ssm: [
+      { x: -2, y: -2.6, a: -0.2 }, { x: -3.2, y: -2.6, a: -0.2 }, { x: -4.4, y: -2.6, a: -0.2 },
+      { x: -2, y: 2.6, a: 0.2 }, { x: -3.2, y: 2.6, a: 0.2 }, { x: -4.4, y: 2.6, a: 0.2 },
+    ],
+    hp: 95, sensor: 2100, sig: 0.75,
+  },
+  lcs: {
+    typeId: 8, team: 1, kind: "ship", level: 2, price: 4000,
+    label: "Littoral Combat Ship Independence", short: "LCS Independence",
+    weapons: ["gun57", "nsm", "searam"], ability: "radar",
+    length: 127, beam: 31.6, maxSpeed: 20.6, maxReverse: 0.3, accel: 1.6, decel: 2.2, turnRate: 0.15,
+    gun: { x: 44, arc: 150 * DEG, speed: 1.8 },
+    ram: { x: 12, arc: 150 * DEG, speed: 1.8 },
+    ssm: [
+      { x: 30, y: -5, a: -0.6 }, { x: 28, y: -5, a: -0.6 }, { x: 26, y: -5, a: -0.6 }, { x: 24, y: -5, a: -0.6 },
+      { x: 30, y: 5, a: 0.6 }, { x: 28, y: 5, a: 0.6 }, { x: 26, y: 5, a: 0.6 }, { x: 24, y: 5, a: 0.6 },
+    ],
+    hp: 200, sensor: 2600, sig: 0.95,
+  },
+  burke: {
+    typeId: 9, team: 1, kind: "ship", level: 3, price: 12000,
+    label: "Zerstörer Arleigh Burke (DDG-51)", short: "Zerstörer Arleigh Burke",
+    weapons: ["gun127", "harpoon", "sm2"], ability: "radar",
+    length: 155, beam: 20, maxSpeed: 15.4, maxReverse: 0.3, accel: 1.1, decel: 1.6, turnRate: 0.13,
+    gun: { x: 58, arc: 150 * DEG, speed: 1.2 },
+    vls: { x: 44, y: 0 },
+    ssm: [
+      { x: -38, y: -3.4, a: -0.6 }, { x: -40, y: -3.4, a: -0.6 }, { x: -42, y: -3.4, a: -0.6 }, { x: -44, y: -3.4, a: -0.6 },
+      { x: -38, y: 3.4, a: 0.6 }, { x: -40, y: 3.4, a: 0.6 }, { x: -42, y: 3.4, a: 0.6 }, { x: -44, y: 3.4, a: 0.6 },
+    ],
+    mags: { sm2: 40 },
+    hp: 340, sensor: 3200, sig: 1.0,
+  },
+  america: {
+    typeId: 10, team: 1, kind: "ship", level: 2, price: 6000,
+    label: "Amphibisches Angriffsschiff America (LHA-6)", short: "USS-Klasse America",
+    weapons: ["searam"], ability: "radar", heliType: "blackhawk", drawScale: [1.4, 1.2],
+    length: 257, beam: 36, maxSpeed: 11.3, maxReverse: 0.25, accel: 0.6, decel: 0.9, turnRate: 0.07,
+    ram: { x: -118, arc: 150 * DEG, speed: 1.6 },
+    mags: { searam: 22 },
+    hp: 450, sensor: 2800, sig: 1.4,
+    heliSpots: [64, 38, 12, -14, -40, -66].map((x) => ({ x: x * 1.4, y: -4.8 })),
+  },
+  blackhawk: {
+    typeId: 2, team: 1, kind: "heli", level: 2, price: 0,
+    label: "UH-60 Black Hawk", short: "Black Hawk",
+    weapons: ["mg", "hellfire"], ability: "flares",
+    length: 19.8, beam: 16.4, maxSpeed: 72, maxReverse: 0.35, accel: 16, decel: 22, turnRate: 1.5,
+    hitRadius: 8, hp: 40, sensor: 1600, sig: 0.6,
+  },
+  reaper: {
+    typeId: 11, team: 1, kind: "drone", level: 1, price: 0,
+    label: "Aufklärungsdrohne MQ-9 Reaper", short: "MQ-9 Reaper",
+    weapons: ["harm"], ability: "radar",
+    length: 11, beam: 20, maxSpeed: 68, minSpeed: 28, maxReverse: 0, accel: 11, decel: 11, turnRate: 0.6,
+    hitRadius: 8, hp: 25, sensor: 3300, sig: 0.45,
   },
 };
+export const TYPE_BY_ID = [];
+for (const [k, d] of Object.entries(BOATS)) TYPE_BY_ID[d.typeId] = k;
+export const START_SHIP = ["gepard", "cyclone"];
+export const DRONE_OF = ["heron", "reaper"];
+export const isAir = (def) => def.kind === "heli" || def.kind === "drone";
+
+// Geld (Taler)
+export const ECONOMY = {
+  // Abschussprämie nach Stufe/Art des Opfers
+  bounty(def) {
+    if (def.kind === "drone") return 400;
+    if (def.kind === "heli") return 600;
+    if (def.heliSpots) return 3000;
+    return [0, 1000, 1800, 3000][def.level] || 1000;
+  },
+  assistShare: 0.4,
+  assistWindow: 30,
+  perDamage: 5,
+  rescue: 150, // je geborgenem Schiffbrüchigen
+  capture: 600, // Stützpunkt erobert (je beteiligtem Fahrzeug)
+  neutralize: 200,
+};
+
+// Waffen. kind: gun (Rohrwaffe), ssm (Seezielflugkörper), sam (Flugabwehr), mg, agm (Luft-Boden).
+export const WEAPONS = {
+  gun76: { kind: "gun", label: "76 mm OTO Melara", auto: true, reload: 0.6, speed: 320, range: 2200, damage: 6, spread: 0.012 },
+  gun25: { kind: "gun", label: "25 mm Mk 38", auto: true, reload: 0.15, speed: 460, range: 1300, damage: 1.6, spread: 0.02 },
+  gun57: { kind: "gun", label: "57 mm Mk 110", auto: true, reload: 0.35, speed: 380, range: 2000, damage: 4, spread: 0.015 },
+  gun127: { kind: "gun", label: "127 mm Mk 45", auto: true, reload: 1.3, speed: 300, range: 3000, damage: 13, spread: 0.01 },
+  exocet: { kind: "ssm", label: "MM38 Exocet", reload: 15, interval: 0.6, speed: 140, turn: 1.0, range: 4200, damage: 40, seekerRange: 1200, seekerCone: 0.6 },
+  rbs15: { kind: "ssm", label: "RBS 15 Mk3", reload: 16, interval: 0.6, speed: 150, turn: 1.0, range: 5000, damage: 45, seekerRange: 1300, seekerCone: 0.6 },
+  harpoon: { kind: "ssm", label: "RGM-84 Harpoon", reload: 18, interval: 0.5, speed: 145, turn: 1.0, range: 5000, damage: 45, seekerRange: 1300, seekerCone: 0.6 },
+  nsm: { kind: "ssm", label: "Naval Strike Missile", reload: 16, interval: 0.5, speed: 150, turn: 1.4, range: 4800, damage: 42, seekerRange: 1400, seekerCone: 0.7 },
+  griffin: { kind: "ssm", label: "Griffin", reload: 8, interval: 0.35, speed: 170, turn: 2.0, range: 2600, damage: 16, seekerRange: 900, seekerCone: 0.6 },
+  ram: { kind: "sam", label: "RAM Luftabwehr", magazine: 21, reload: 4, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
+  searam: { kind: "sam", label: "SeaRAM", magazine: 11, reload: 3.5, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
+  stinger: { kind: "sam", label: "Stinger", magazine: 8, reload: 5, interval: 0.5, speed: 260, turn: 3.6, range: 1100, damage: 3, seekerRange: 1000, pk: 0.6 },
+  sm2: { kind: "sam", label: "SM-2 Standard", magazine: 32, reload: 6, interval: 0.6, speed: 300, turn: 2.2, range: 3800, damage: 8, seekerRange: 3000, pk: 0.75 },
+  mg: { kind: "mg", label: "Türschützen-MG", auto: true, reload: 0.09, speed: 520, range: 800, damage: 0.6, heliDamage: 1.2, spread: 0.035 },
+  hellfire: {
+    kind: "agm", label: "AGM-114 Hellfire", count: 8, reload: 6, interval: 0.4, speed: 210, turn: 2.4, range: 3000, damage: 14,
+    seekerRange: 900, seekerCone: 0.55, rails: [{ x: -1.2, y: -3.4 }, { x: -1.2, y: 3.4 }],
+  },
+  marte: {
+    kind: "agm", label: "Marte ER", count: 4, reload: 9, interval: 0.6, speed: 190, turn: 1.6, range: 4500, damage: 24,
+    seekerRange: 1300, seekerCone: 0.6, rails: [{ x: -0.5, y: -2.4 }, { x: -0.5, y: 2.4 }],
+  },
+  // Anti-Radar-Flugkörper: jagen nur Schiffe mit eingeschaltetem Radar.
+  // Schaltet das Ziel sein Radar ab, fliegt die ARM nur noch zur letzten bekannten Position.
+  armiger: {
+    kind: "arm", label: "ARMIGER", count: 2, reload: 20, interval: 1, speed: 260, turn: 1.8, range: 6500, damage: 30,
+    seekerRange: 6500, seekerCone: 0.9, rails: [{ x: 0, y: -5 }, { x: 0, y: 5 }],
+  },
+  harm: {
+    kind: "arm", label: "AGM-88 HARM", count: 2, reload: 20, interval: 1, speed: 260, turn: 1.8, range: 6500, damage: 30,
+    seekerRange: 6500, seekerCone: 0.9, rails: [{ x: 0, y: -4.5 }, { x: 0, y: 4.5 }],
+  },
+  lock: {
+    range: 3000, // Lock-Reichweite (Ziel muss vom Team erfasst sein)
+    breakRange: 5500,
+    time: 1.2,
+    pick: 140,
+  },
+};
+// Alte Namen (Kompatibilität)
+WEAPONS.gun = WEAPONS.gun76;
 
 // Fähigkeiten (Taste E)
 export const ABILITIES = {
   radar: {
     label: "Radar-Rundumsuche",
-    duration: 10, // s aktiv
-    cooldown: 30, // s Abklingzeit nach Ende
-    lockRange: 5000, // erweiterte Lock-Reichweite während aktiv
-    pick: 380, // größerer Fangradius am Mauszeiger (weit herausgezoomt)
-    viewRange: 5200, // sichtbarer Radius in der Radaransicht
+    duration: 10,
+    cooldown: 30,
+    lockRange: 5000,
+    pick: 380,
+    viewRange: 5200,
+  },
+  flares: {
+    label: "Täuschkörper",
+    duration: 3,
+    cooldown: 18,
   },
 };
 
-// Fähigkeit des Hubschraubers: Täuschkörper lenken RAM-Flugkörper ab
-ABILITIES.flares = {
-  label: "Täuschkörper",
-  duration: 3,
-  cooldown: 18,
+export const PROJ = { SHELL: 1, EXOCET: 2, RAM: 3, BULLET: 4, HELLFIRE: 5, ARM: 6 };
+export const PROJ_OF_KIND = { gun: 1, ssm: 2, sam: 3, mg: 4, agm: 5, arm: 6 };
+// Flugkörper, die von Flugabwehr (sam) abgefangen werden können
+export const INTERCEPTABLE = new Set([2, 5, 6]);
+
+// ---------- Sensoren ----------
+export const SENSORS = {
+  radarOffFactor: 0.4, // eigene Reichweite bei ausgeschaltetem Radar (nur Sicht)
+  radarOffSig: 0.6, // eigene Signatur bei ausgeschaltetem Radar
+  emitterBonus: 1.25, // eingeschaltetes Radar wird weiter entdeckt (ESM)
+  radarAbility: 5000, // Reichweite während der Radar-Rundumsuche
+  base: 2600, // Abdeckung der Marinebasis
+  outpost: 2300, // Abdeckung eines gehaltenen Stützpunkts
+  ghost: 12, // s: zuletzt gesehene Kontakte
 };
 
-export const PROJ = { SHELL: 1, EXOCET: 2, RAM: 3, BULLET: 4, HELLFIRE: 5 };
+// Erfassungsreichweite einer Einheit
+export function sensorRange(def, radarOn, abilityRadar) {
+  if (abilityRadar) return Math.max(SENSORS.radarAbility, def.sensor);
+  if (def.kind === "ship" && !radarOn) return def.sensor * SENSORS.radarOffFactor;
+  return def.sensor;
+}
+export function signature(def, radarOn) {
+  if (def.kind !== "ship") return def.sig;
+  return def.sig * (radarOn ? SENSORS.emitterBonus : SENSORS.radarOffSig);
+}
+
+// ---------- Frontkarte: Stützpunkte ----------
+export const OUTPOST_NAMES = ["Sturmfels", "Goldsand", "Kolbenriff", "Schotenbank", "Leuchtturm Nord", "Ährenkap", "Paprikaklippe", "Nebelsund", "Silberbucht", "Rotkopf"];
+export const FRONT = {
+  // Am Stützpunkt dürfen nur kleine Schiffe starten (Stufe 1–2, keine Träger)
+  maxSpawnLevel: 2,
+  rate: 1.25, // Fortschritt je halbe Sekunde und Fahrzeug (höchstens 3 zählen), Ziel ±100
+  zoneExtra: 320, // Zonenradius = Inselradius + zoneExtra
+};
 
 // Zielwinkel von Geschütz und RAM-Starter zur Mausposition (Weltkoordinaten).
 // gun: relativ zum Bug, ram: relativ zu achtern. Im toten Winkel → Ruhestellung (0).
@@ -308,9 +388,41 @@ export const BASE_LAYOUT = {
   carrierSpawn: { x: 505, y: 0 },
 };
 
+// Kontinente links (Maiskolbistan) und rechts (Paprikistan): Die Küste liegt CONTINENT.depth vom Kartenrand.
+// Die Marinebasis sitzt an einem geraden Küstenabschnitt (|y| < straight), sonst ist die Küste zerklüftet.
+export const CONTINENT = { depth: 1500, straight: 1500, ramp: 500 };
+
 export function teamBase(team) {
   const half = WORLD_SIZE / 2;
-  return team === 0 ? { team, edge: -half, dir: 1 } : { team, edge: half, dir: -1 };
+  const edge = half - CONTINENT.depth;
+  return team === 0 ? { team, edge: -edge, dir: 1 } : { team, edge, dir: -1 };
+}
+
+// Küstenverlauf: Abstand der Küste vom Basis-Nullpunkt (lokal), abhängig von y
+const COAST_WAVES = [
+  [
+    [230, 1 / 1100, 0.4],
+    [120, 1 / 470, 2.1],
+    [55, 1 / 190, 4.0],
+  ],
+  [
+    [240, 1 / 1000, 1.7],
+    [110, 1 / 520, 5.2],
+    [60, 1 / 170, 0.9],
+  ],
+];
+export function coastLocal(team, y) {
+  const ay = Math.abs(y);
+  if (ay < CONTINENT.straight) return BASE_LAYOUT.landDepth;
+  const k = Math.min(1, (ay - CONTINENT.straight) / CONTINENT.ramp);
+  let n = 0;
+  for (const [a, f, p] of COAST_WAVES[team]) n += a * Math.sin(y * f + p);
+  // Buchten und Landzungen, im Mittel etwas weiter draußen als die Basis
+  return BASE_LAYOUT.landDepth + k * (120 + n);
+}
+export function coastX(team, y) {
+  const b = teamBase(team);
+  return b.edge + b.dir * coastLocal(team, y);
 }
 
 function localRect(base, [x0, x1, y0, y1]) {
@@ -332,10 +444,17 @@ export function inRect(r, x, y, m = 0) {
   return x > r.x0 - m && x < r.x1 + m && y > r.y0 - m && y < r.y1 + m;
 }
 
-export function baseSpawn(team, i) {
+// Kurs vom Liegeplatz zur Hafeneinfahrt (lokal x = 740, y = 0)
+function harborHeading(base, lx, ly) {
+  return Math.atan2(-ly, (740 - lx) * base.dir);
+}
+
+export function baseSpawn(team, i, def) {
   const base = teamBase(team);
-  const s = BASE_LAYOUT.spawns[i % BASE_LAYOUT.spawns.length];
-  return { x: base.edge + base.dir * s.x, y: s.y, h: base.dir === 1 ? 0 : Math.PI };
+  const big = def && def.length > 100;
+  const slots = BASE_LAYOUT.spawns.filter((s) => !big || s.x >= 500);
+  const s = slots[i % slots.length];
+  return { x: base.edge + base.dir * s.x, y: s.y, h: harborHeading(base, s.x, s.y) };
 }
 
 export function carrierSpawn(team) {
@@ -344,12 +463,34 @@ export function carrierSpawn(team) {
   return { x: base.edge + base.dir * s.x, y: s.y, h: base.dir === 1 ? 0 : Math.PI };
 }
 
+// Drohnen starten über der eigenen Basis Richtung See
+export function droneSpawn(team) {
+  const base = teamBase(team);
+  return { x: base.edge + base.dir * 200, y: (Math.random() - 0.5) * 900, h: base.dir === 1 ? 0 : Math.PI };
+}
+
 // Landepunkt i eines Trägers in Weltkoordinaten
-export function heliSpotWorld(b, i) {
-  const sp = BOATS.carrier.heliSpots[i];
+export function heliSpotWorld(b, i, def = BOATS.carrier) {
+  const sp = def.heliSpots[i];
   const c = Math.cos(b.h);
   const s = Math.sin(b.h);
   return { x: b.x + sp.x * c - sp.y * s, y: b.y + sp.x * s + sp.y * c, h: b.h };
+}
+
+// Startpunkt im Wasser vor einem Stützpunkt, zur eigenen Basis hin
+export function outpostSpawn(map, o, team, def) {
+  const base = teamBase(team);
+  const toward = Math.atan2(0 - o.y, base.edge - o.x);
+  for (let k = 0; k < 16; k++) {
+    const a = toward + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35;
+    const d = o.isl.r * 1.45 + 120 + (def ? def.length / 2 : 30);
+    const x = o.x + Math.cos(a) * d;
+    const y = o.y + Math.sin(a) * d;
+    const h = a + Math.PI / 2;
+    const b = { x, y, h, v: 0, w: 0 };
+    if (!def || !hullHitsLand(map, b, def)) return { x, y, h };
+  }
+  return null;
 }
 
 export function generateMap(seed = MAP_SEED) {
@@ -357,14 +498,15 @@ export function generateMap(seed = MAP_SEED) {
   const islands = [];
   const half = WORLD_SIZE / 2;
   let tries = 0;
-  while (islands.length < 26 && tries < 2000) {
+  const seaHalf = half - CONTINENT.depth - BASE_LAYOUT.landDepth;
+  while (islands.length < 48 && tries < 4000) {
     tries++;
-    const r = 70 + Math.pow(rnd(), 1.8) * 380;
-    const x = (rnd() * 2 - 1) * (half - r - 250);
+    const r = 70 + Math.pow(rnd(), 1.8) * 420;
+    const x = (rnd() * 2 - 1) * (seaHalf - r - 250);
     const y = (rnd() * 2 - 1) * (half - r - 250);
-    // Mitte frei halten und Abstand zwischen Inseln für Fahrrinnen; Basen an den Rändern frei lassen
+    // Mitte frei halten und Abstand zwischen Inseln für Fahrrinnen; vor den Küsten und Basen frei lassen
     if (Math.hypot(x, y) < 500 + r) continue;
-    if (Math.abs(x) + r * 1.5 > half - 1000) continue;
+    if (Math.abs(x) + r * 1.5 > seaHalf - 900) continue;
     let ok = true;
     for (const o of islands) {
       if (Math.hypot(o.x - x, o.y - y) < (o.r + r) * 1.45 + 160) {
@@ -380,10 +522,25 @@ export function generateMap(seed = MAP_SEED) {
     islands.push({ id: islands.length, x, y, r, harm, seed: Math.floor(rnd() * 1e9) });
   }
   const rects = [...baseRects(teamBase(0)), ...baseRects(teamBase(1))];
-  return { size: WORLD_SIZE, islands, rects };
+  // Stützpunkte: 7 Inseln, möglichst gleichmäßig über die Karte verteilt (größere bevorzugt)
+  const outposts = [];
+  const cand = islands.filter((i) => i.r >= 120).sort((a, b) => b.r - a.r);
+  for (const isl of cand) {
+    if (outposts.length >= OUTPOST_NAMES.length) break;
+    if (outposts.some((o) => Math.hypot(o.x - isl.x, o.y - isl.y) < 1450)) continue;
+    outposts.push({ isl, x: isl.x, y: isl.y, r: isl.r + FRONT.zoneExtra });
+  }
+  outposts.sort((a, b) => a.x - b.x || a.y - b.y);
+  outposts.forEach((o, i) => {
+    o.id = i;
+    o.name = OUTPOST_NAMES[i];
+  });
+  return { size: WORLD_SIZE, islands, rects, outposts };
 }
 
 export function isOnLand(map, x, y, margin = 0) {
+  // Kontinente
+  if (x < coastX(0, y) + margin || x > coastX(1, y) - margin) return true;
   if (map.rects) for (const r of map.rects) if (inRect(r, x, y, margin)) return true;
   for (const isl of map.islands) {
     const dx = x - isl.x;
@@ -440,7 +597,8 @@ export function findSpawn(map, rnd = Math.random) {
 export function stepHeli(b, input, def) {
   const th = clamp(+input.th || 0, -def.maxReverse, 1);
   const ru = clamp(+input.ru || 0, -1, 1);
-  const target = th * def.maxSpeed;
+  // Drohnen fliegen wie Flugzeuge: nie langsamer als minSpeed
+  const target = def.minSpeed ? def.minSpeed + Math.max(0, th) * (def.maxSpeed - def.minSpeed) : th * def.maxSpeed;
   const dv = target - b.v;
   const a = Math.abs(target) > Math.abs(b.v) ? def.accel : def.decel;
   b.v += clamp(dv, -a * DT, a * DT);
@@ -457,7 +615,7 @@ export function stepHeli(b, input, def) {
 }
 
 export function stepEntity(b, input, def, map) {
-  if (def.kind === "heli") stepHeli(b, input, def);
+  if (def.kind === "heli" || def.kind === "drone") stepHeli(b, input, def);
   else stepBoat(b, input, def, map);
 }
 

@@ -1,7 +1,6 @@
 // Flugkörper, Granaten, Explosionen, Wracks und AGIS-Lock-Anzeige (nur Darstellung).
-import { PROJ, TEAMS } from "../shared/sim.js";
-import { drawGepard } from "./gepard.js";
-import { drawCarrier } from "./carrier.js";
+import { PROJ, TEAMS, TYPE_BY_ID, BOATS } from "../shared/sim.js";
+import { drawVehicle } from "./vehicles.js";
 
 const particles = [];
 const wrecks = [];
@@ -81,6 +80,10 @@ export function spawnEvent(e) {
     case "sink":
       sinkAt(x, y, h, e[4] | 0, e[5] | 0);
       break;
+    case "rescue":
+      burst(x, y, 12, 10, { r: 0.8, grow: 0.5, life: 0.8, color: "255,255,255", alpha: 0.9, glow: true, drag: 3 });
+      rings.push({ x, y, r: 3, grow: 25, age: 0, life: 0.8, color: "255,215,94", width: 1.5 });
+      break;
     case "crash":
       crashAt(x, y, h);
       break;
@@ -106,7 +109,7 @@ export function spawnEvent(e) {
 }
 
 export function sinkAt(x, y, h, team = 0, typeId = 0) {
-  const big = typeId === 1;
+  const big = (BOATS[TYPE_BY_ID[typeId]] || BOATS.gepard).length > 120;
   explosion(x, y, big ? 10 : 7);
   for (let i = 0; i < (big ? 12 : 6); i++) {
     const d = rand(-22, 22) * (big ? 3.5 : 1);
@@ -134,7 +137,7 @@ export function emitTrails(projs, dt) {
   for (const q of projs) {
     if (q.type === PROJ.SHELL || q.type === PROJ.BULLET) continue;
     let tr = trails.get(q.id);
-    if (!tr) trails.set(q.id, (tr = { pts: [], big: q.type === PROJ.EXOCET }));
+    if (!tr) trails.set(q.id, (tr = { pts: [], big: q.type === PROJ.EXOCET || q.type === PROJ.ARM }));
     tr.alive = true;
     const back = tr.big ? 3.4 : 1.8;
     const x = q.x - Math.cos(q.h) * back;
@@ -201,8 +204,10 @@ export function drawEffectsBelow(ctx, t) {
     ctx.scale(sc, sc * (1 - k * 0.35));
     ctx.globalAlpha = Math.max(0, 1 - k * 1.1);
     ctx.filter = `brightness(${0.55 - k * 0.3})`;
-    if (w.typeId === 1) drawCarrier(ctx, { t: 0, seed: 1, ram: -0.6, flag: TEAMS[w.team].flag });
-    else drawGepard(ctx, { t: 0, seed: 1, gun: 0.4, ram: -0.6, exo: [false, false, false, false], flag: TEAMS[w.team].flag });
+    const type = TYPE_BY_ID[w.typeId] || "gepard";
+    const d = BOATS[type];
+    const empty = d.weapons.map((k) => (k && d.ssm && /exocet|rbs15|harpoon|nsm|griffin/.test(k) ? d.ssm.map(() => 1) : [0, 0, 0]));
+    drawVehicle(ctx, type, { t: 0, seed: 1, gun: 0.4, ram: -0.6, ammo: empty, flag: TEAMS[w.team].flag });
     ctx.filter = "none";
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -363,7 +368,10 @@ export function drawProjectiles(ctx, projs, t, zoom) {
       const s = 1.3 * boost;
       ctx.scale(s, s);
       if (q.type === PROJ.EXOCET) drawExocetBody(ctx, t);
-      else if (q.type === PROJ.HELLFIRE) {
+      else if (q.type === PROJ.ARM) {
+        ctx.scale(0.85, 0.75);
+        drawExocetBody(ctx, t);
+      } else if (q.type === PROJ.HELLFIRE) {
         ctx.scale(0.65, 0.9);
         drawRamBody(ctx, t);
       } else drawRamBody(ctx, t);

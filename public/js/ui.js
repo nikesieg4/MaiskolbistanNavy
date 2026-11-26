@@ -43,3 +43,29 @@ export const ABILITY_UI = {
     icon: svg('<circle cx="12" cy="8" r="3" fill="#fff3c4"/><circle cx="20" cy="14" r="2.5" fill="#ffe08a"/><circle cx="8" cy="17" r="2" fill="#ffd060"/><path d="M12 8 Q24 2 36 10" stroke="#ddd" stroke-width="1.2" fill="none" opacity=".6"/><path d="M20 14 Q30 16 40 20" stroke="#ddd" stroke-width="1.2" fill="none" opacity=".5"/>'),
   },
 };
+
+// Weitere Waffen (gleiche Symbole je Waffenart)
+const G = WEAPON_UI.gun;
+const S = WEAPON_UI.exocet;
+const R = WEAPON_UI.ram;
+const H = WEAPON_UI.hellfire;
+Object.assign(WEAPON_UI, {
+  gun76: { ...G, name: "76 mm" },
+  gun25: { ...G, name: "25 mm" },
+  gun57: { ...G, name: "57 mm" },
+  gun127: { ...G, name: "127 mm" },
+  rbs15: { ...S, name: "RBS 15" },
+  harpoon: { ...S, name: "Harpoon" },
+  nsm: { ...S, name: "NSM" },
+  griffin: { ...S, name: "Griffin" },
+  searam: { ...R, name: "SeaRAM" },
+  stinger: { ...R, name: "Stinger", sub: "Nahbereichs-Flugabwehr" },
+  sm2: { ...R, name: "SM-2", sub: "Flugabwehr großer Reichweite" },
+  marte: { ...H, name: "Marte ER" },
+  armiger: {
+    name: "ARMIGER",
+    sub: "jagt sendende Radare",
+    icon: svg('<rect x="4" y="10" width="34" height="4" rx="2" fill="#e4e6e2"/><path d="M38 10 Q46 12 38 14 Z" fill="#2b2b2b"/><path d="M10 12 L16 5 L18 5 L16 12 L18 19 L16 19 Z" fill="#9a9d98"/><path d="M40 4 Q44 12 40 20" stroke="#ff6b5a" stroke-width="1.4" fill="none"/><path d="M43 2 Q48 12 43 22" stroke="#ff6b5a" stroke-width="1.2" fill="none" opacity=".6"/>'),
+  },
+});
+WEAPON_UI.harm = { ...WEAPON_UI.armiger, name: "AGM-88 HARM" };

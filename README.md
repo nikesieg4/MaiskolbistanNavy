@@ -5,35 +5,43 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 
 **Live:** https://maiskolbistan-navy.nikesieg0.workers.dev
 
-## Teams und Marinebasen
-Im Startmenü wählt man ein Team:
-- **Maiskolbistan** – Marinebasis West. Flagge: Staatsflagge der Republik Maiskolbistan
-  (senkrecht Rot · Gold · Rot, aus `assets/flagge.svg` in nikesieg4/maiskolbistan-info).
-- **Paprikistan** – Marinebasis Ost. Flagge (eigener Entwurf): waagerecht Rot · Orange · Grün.
+## Welt, Teams und Frontkarte
+- **Karte:** 10 × 10 km. Links der Kontinent **Maiskolbistan** (Maisfelder, rote Dächer), rechts **Paprikistan**
+  (Paprikafelder). An der Küste liegt jeweils die Marinebasis mit Werften, dazwischen ein Meer mit rund 50 Inseln.
+- **Flaggen:** Maiskolbistan = Staatsflagge Rot · Gold · Rot (`assets/flagge.svg` in nikesieg4/maiskolbistan-info),
+  Paprikistan = Rot · Orange · Grün (eigener Entwurf).
+- **Frontkarte:** 9 Inseln tragen **Stützpunkte** mit Radarstation. Erobert wird, wenn nur Schiffe oder Hubschrauber
+  eines Teams in der Zone sind (bis zu 3 zählen, Drohnen nicht). Der Besitz wird dauerhaft gespeichert (Durable Object
+  „front“) und übersteht Neustarts und Updates. Gehaltene Stützpunkte liefern Radarabdeckung und sind **Startorte für
+  kleine Schiffe (Stufe 1–2, keine Träger)**. Eroberung bringt 600 Taler pro beteiligtem Fahrzeug.
+- **Sicherer Hafen:** Im eigenen Hafenbecken nimmt man keinen Schaden. Kein Eigenbeschuss.
 
-Jede Basis hat Hafenbecken mit Molen, Molenfeuern und Piers, Hauptquartier, Flaggenmast, Radarturm, Hafenkräne,
-Hafenbahn, Tanklager, Kasernen und drei Werften (Werft 1 Schnellboote mit Trockendock und Portalkran,
-Werft 2 Fregatten und Werft 3 U-Boote als „in Planung“ für spätere Boote). Man startet im eigenen Hafen;
-im eigenen Hafenbecken („sicherer Hafen“) nimmt man keinen Schaden. Kein Eigenbeschuss, Lock nur auf Gegner.
-Die Teamflagge weht am Heck jedes Schiffes.
+## Flotten der Nationen
+| | Maiskolbistan (deutsch/europäisch) | Paprikistan (amerikanisch) | Preis |
+|---|---|---|---|
+| Stufe 1 | Schnellboot Gepard (Kl. 143A): 76 mm, Exocet, RAM | Patrouillenboot Cyclone (PC-1): 25 mm, Griffin, Stinger | – |
+| Stufe 2 | Korvette Braunschweig (Kl. 130): 76 mm, RBS 15, 2 × RAM | LCS Independence (Trimaran): 57 mm, NSM, SeaRAM | 4.000 |
+| Stufe 3 | Fregatte Sachsen (F124): 76 mm, Harpoon, SM-2, RAM | Zerstörer Arleigh Burke: 127 mm, Harpoon, SM-2 | 12.000 |
+| Träger | Hubschrauberträger Ähre | USS America (LHA-6) | 6.000 |
+| Hubschrauber | NH90 NFH: MG, Marte ER | UH-60 Black Hawk: MG, Hellfire | Start vom Träger |
+| Drohne | Heron TP: ARMIGER | MQ-9 Reaper: AGM-88 HARM | Start von der Basis |
 
-## Geld, Schiffsladen und Fahrzeuge
-- **Taler** gibt es für Abschüsse (Schnellboot 1.000, Träger 3.000, Black Hawk 600), Assists (40 % der Prämie,
-  wenn man dem Opfer in den letzten 30 s Schaden zugefügt hat) und 5 Taler je verursachtem Trefferpunkt.
-- Das Konto hängt am Browser (anonymes Token im localStorage) und liegt in einem eigenen Durable Object („konten“),
-  übersteht also Tod, Neuladen und Updates.
-- **Schiffsladen:** Im eigenen Hafen erscheint der Knopf „Schiffsladen“ (Taste B). Gekaufte Schiffe bleiben freigeschaltet
-  und können im Hafen jederzeit gewählt werden.
+## Sensorkrieg
+- Gegner sind nur sichtbar, wenn **dein Team** sie erfasst (Schiffe, Luftfahrzeuge, Basis, gehaltene Stützpunkte).
+  Erfasste Kontakte sind für das ganze Team sichtbar, verlorene bleiben 12 s als „?“ stehen.
+- **Radar ein/aus (T):** Mit eingeschaltetem Radar siehst du weit, wirst aber selbst weiter entdeckt.
+  Ausgeschaltet bist du schwer zu finden, siehst aber nur nahe Ziele. „⚠ Vom Gegner erfasst“ zeigt, ob man dich sieht.
+- **Zielmarkierung:** Jeder AGIS-Lock gilt für das ganze Team. Seeziel- und Luft-Boden-Flugkörper ohne eigenen Lock
+  fliegen auf die Markierung eines Teammitglieds (z. B. einer Drohne).
+- **Anti-Radar-Flugkörper (ARM):** Drohnen tragen 2 ARM. Sie jagen nur Schiffe mit **sendendem Radar**. Schaltet das
+  Ziel sein Radar ab, fliegt die ARM nur noch zur letzten bekannten Position. Flugabwehr kann ARM abfangen.
 
-| Fahrzeug | Preis | Eigenschaften |
-|---|---|---|
-| Schnellboot Gepard (Kl. 143A) | – | 100 HP, 40 kn, 76 mm, Exocet, RAM, Radar-Rundumsuche |
-| Hubschrauberträger Klasse Ähre | 6.000 | 400 HP, 20 kn, 182 m, 2 RAM-Starter (42 Schuss), Radar, **6 Landepunkte** |
-| UH-60 Black Hawk | – | 40 HP, 140 kn, fliegt über Inseln, M240-Türschützen-MG, 8 Hellfire, Täuschkörper |
-
-Black Hawks starten im Startmenü („Starten als → Black Hawk“) auf einem Hubschrauberträger des eigenen Teams,
-solange dort ein Landepunkt frei ist. Hubschrauber können von RAM (70 %), dem 76-mm-Geschütz und MGs getroffen werden;
-Täuschkörper (E) machen sie 3 s lang für RAM unsichtbar.
+## Luftrollen
+- **Hubschrauber** (vom Träger des Teams): Angriff mit MG und Luft-Boden-Raketen, Täuschkörper gegen Flugabwehr.
+- **Seenotrettung:** Nach jedem Untergang treiben Rettungsinseln. Ein Hubschrauber, der langsam darüber schwebt,
+  birgt die Schiffbrüchigen (150 Taler je Insel).
+- **Aufklärungsdrohnen** (von der Basis): sehr große Sensorreichweite, Zielmarkierung für das Team, ARM gegen Radare.
+  Drohnen fliegen wie Flugzeuge (Mindestgeschwindigkeit) und können keine Stützpunkte erobern.
 
 ## Steuerung
 | Taste | Aktion |
@@ -45,7 +53,8 @@ Täuschkörper (E) machen sie 3 s lang für RAM unsichtbar.
 | 1 / 2 / 3 | Waffe wählen: 76 mm, Exocet, RAM (oder Klick in der Waffenleiste) |
 | F | Feuer (76 mm: Dauerfeuer solange gedrückt; Flugkörper: einer pro Tastendruck) |
 | R | AGIS-Radar-Lock auf das Schiff unter dem Mauszeiger (nochmal R = lösen) |
-| E | Fähigkeit: Radar-Rundumsuche (Schiffe) bzw. Täuschkörper (Hubschrauber) |
+| E | Fähigkeit: Radar-Rundumsuche (Schiffe, Drohnen) bzw. Täuschkörper (Hubschrauber) |
+| T | Radar ein/aus (Schiffe) |
 | B | Schiffsladen (im eigenen Hafen) |
 | Mausrad | Zoom |
 
@@ -82,6 +91,10 @@ public/            Client (wird beim Build in den Worker eingebettet)
   js/carrier.js    Hubschrauberträger
   js/heli.js       UH-60 Black Hawk
   js/ui.js         Symbole der Waffenleiste
+  js/warships.js   K130, F124, Cyclone, LCS, Arleigh Burke
+  js/aircraft.js   NH90, Heron TP, MQ-9 Reaper
+  js/vehicles.js   zeichnet jedes Fahrzeug nach Typ
+  js/world.js      Kontinente, Stützpunkte, Frontkarte
 src/worker.js      Worker (Auslieferung + /ws) und Durable Object `World`
 scripts/build-assets.mjs  Bettet public/ in src/assets.gen.js ein
 ```

@@ -144,3 +144,24 @@ button:hover { background: #ffe38a; } button:disabled { opacity: .5; cursor: def
 .spawnopt:disabled { opacity: .45; }
 .cells i { min-width: 5px; }
 #telegraph[hidden] { display: none; }
+
+/* Sensorkrieg und Frontkarte */
+kbd.inl { position: static; font-size: 9px; padding: 0 4px; margin-left: 2px; }
+#radarStatus.on { color: #7dffb0; } #radarStatus.off { color: #ffb4a8; }
+#detWarn { margin-top: 4px; padding: 3px 6px; border-radius: 6px; background: rgba(239,75,58,.25); color: #ffb4a8; font-weight: 700; font-size: 12px;
+  animation: blink 0.8s steps(2) infinite; }
+#detWarn[hidden] { display: none; }
+#frontHud { top: 12px; left: 50%; transform: translateX(-50%); padding: 6px 12px; font-weight: 800; font-size: 14px; white-space: nowrap; }
+#frontHud .fm { color: #f1c94b; } #frontHud .fp { color: #ff7b5c; } #frontHud small { opacity: .7; font-weight: 400; }
+#capture { top: 50px; left: 50%; transform: translateX(-50%); min-width: 260px; text-align: center; font-size: 13px; font-weight: 700; padding: 6px 10px; }
+#capture[hidden] { display: none; }
+.capbar { height: 6px; margin-top: 4px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
+#captureBar { height: 100%; width: 0; }
+#shopBtn { top: 96px; }
+#toasts { top: 144px; }
+.frontbox { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 0 0 12px; }
+#frontMap { width: 100%; max-width: 340px; height: auto; aspect-ratio: 1; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); }
+.frontbox small { opacity: .8; font-size: 12px; }
+#locRow[hidden] { display: none; }
+#radarRow[hidden] { display: none; }
+.card { max-height: calc(100vh - 32px); overflow: auto; }

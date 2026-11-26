@@ -319,7 +319,7 @@ export function drawCarrier(ctx, anim) {
   ctx.font = "bold 4.5px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("L 21", 0, 0);
+  ctx.fillText(anim.hullNo || "L 21", 0, 0);
   ctx.restore();
 }
 
