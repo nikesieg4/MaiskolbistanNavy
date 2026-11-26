@@ -226,6 +226,42 @@ addEventListener(
   { passive: true }
 );
 
+function zoomBy(f) {
+  if (!state.playing || state.radarK > 0) return;
+  state.zoom = clamp(state.zoom * f, 0.6, 9);
+}
+// Zoom-Knöpfe (iPad) – gedrückt halten zoomt weiter
+for (const [id, f] of [["zoomIn", 1.25], ["zoomOut", 0.8]]) {
+  const btn = document.getElementById(id);
+  let timer = null;
+  const stop = () => { clearInterval(timer); timer = null; };
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    zoomBy(f);
+    stop();
+    timer = setInterval(() => zoomBy(Math.pow(f, 0.35)), 60);
+  });
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"]) btn.addEventListener(ev, stop);
+  btn.addEventListener("click", (e) => e.stopPropagation());
+}
+addEventListener("keydown", (e) => {
+  if (e.target && e.target.tagName === "INPUT") return;
+  if (e.key === "+" || e.key === "=") zoomBy(1.25);
+  else if (e.key === "-" || e.key === "_") zoomBy(0.8);
+});
+// Pinch-Zoom mit zwei Fingern
+let pinchD = 0;
+const touchDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+addEventListener("touchstart", (e) => { if (e.touches.length === 2) pinchD = touchDist(e.touches); }, { passive: true });
+addEventListener("touchmove", (e) => {
+  if (e.touches.length !== 2 || !pinchD) return;
+  const d = touchDist(e.touches);
+  zoomBy(d / pinchD);
+  pinchD = d;
+}, { passive: true });
+addEventListener("touchend", (e) => { if (e.touches.length < 2) pinchD = 0; }, { passive: true });
+
 function send(obj) {
   if (state.ws && state.ws.readyState === 1 && state.pred && !state.dead) state.ws.send(JSON.stringify(obj));
 }

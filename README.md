@@ -96,6 +96,7 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 | T | Radar ein/aus (Schiffe) |
 | H | Hangar (gelandet) |
 | Q / C | Höhe: steigen / sinken (Hubschrauber, Drohnen) |
+| + / − | Zoomen (auch Mausrad, Knöpfe rechts unten fürs iPad, Zwei-Finger-Pinch) |
 | B | Schiffsladen (im eigenen Hafen) |
 | Mausrad | Zoom |
 
