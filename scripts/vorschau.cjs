@@ -304,12 +304,12 @@ async function render(page, W, H) {
       g.strokeText(sub, cx + fw / 2 + 4, fy);
       g.fillStyle = "#f1c94b";
       g.fillText(sub, cx + fw / 2 + 4, fy);
-      g.font = `900 ${big ? 100 : 88}px system-ui, sans-serif`;
+      g.font = `900 ${big ? 86 : 80}px system-ui, sans-serif`;
       g.lineJoin = "round";
       g.lineWidth = big ? 18 : 14;
       g.strokeStyle = "#1b1410";
-      const title1 = "Maiskolbistan";
-      const title2 = "Navy";
+      const title1 = "Multiplayer ";
+      const title2 = "Seegefecht";
       const w1 = g.measureText(title1).width;
       const w2 = g.measureText(title2).width;
       const tx = cx - (w1 + w2) / 2;
@@ -321,7 +321,7 @@ async function render(page, W, H) {
       g.fillText(title2, tx + w1, titleY);
 
       // Schlagwortleiste
-      const pill = "Live-Seeschlacht · Teams · Träger · Black Hawk";
+      const pill = "Frontkarte · Sensorkrieg · Träger · Drohnen";
       g.font = `800 ${big ? 34 : 26}px system-ui, sans-serif`;
       g.textAlign = "center";
       const pw = g.measureText(pill).width + 56;

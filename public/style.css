@@ -74,7 +74,7 @@ kbd { position: absolute; top: 5px; right: 6px; font: 700 10px system-ui; paddin
 #menu[hidden] { display: none; }
 .card { width: min(600px, 100%); text-align: center; background: rgba(8, 26, 42, 0.82);
   border: 1px solid rgba(255,255,255,.14); border-radius: 18px; padding: 28px 20px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
-h1 { margin: 0; font-size: clamp(28px, 6vw, 44px); letter-spacing: .02em; }
+h1 { margin: 0; font-size: clamp(20px, 5vw, 34px); letter-spacing: 0; white-space: nowrap; }
 h1 span:not(.corn) { color: #ffd75e; }
 .sub { margin: 4px 0 12px; opacity: .7; }
 #preview { width: 100%; max-width: 560px; height: auto; aspect-ratio: 560/150; border-radius: 12px; display: block; margin: 0 auto; }

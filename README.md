@@ -1,4 +1,6 @@
-# MaiskolbistanNavy 🌽⚓
+# Multiplayer Seegefecht 🌽⚓
+
+(Repo und Webadresse heißen aus technischen Gründen weiter `MaiskolbistanNavy` bzw. `maiskolbistan-navy`.)
 
 Top-down-Multiplayer-Schiffsspiel im Stil von mk48.io. Läuft komplett auf Cloudflare:
 ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spielserver (WebSocket, 20 Ticks/s).
