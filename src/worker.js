@@ -68,7 +68,7 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 13;
+const WORLD_VERSION = 14;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
 
 // ---------- Konten: Anmeldung ----------
@@ -1696,7 +1696,8 @@ export class World {
             const st = p.ws_[w];
             if (st.max !== undefined) st.rel += DT * 5;
           }
-          if ((p.last.th || 0) > 0.5) this.takeOff(p);
+          // Start nur mit W (Vollschub) – Jets fliegen ohne Taste mit Marschschub und würden sonst sofort wieder abheben
+          if ((p.last.th || 0) > 0.9) this.takeOff(p);
         }
       } else this.checkLanding(p);
       const aim = aimAngles(p.b, def, p.mx, p.my);

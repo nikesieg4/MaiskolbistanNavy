@@ -1572,6 +1572,8 @@ function updateHud(me) {
     ((DEF.kind === "ship" || DEF.kind === "sub") && inRect(harborRect(teamBase(state.team)), me.x, me.y)) ||
     (state.landed && isAir(DEF) && inRect(airfieldRect(state.team), me.x, me.y));
   $("shopBtn").hidden = !inHarbor;
+  // Laden und Hangar gleichzeitig (gelandet auf dem Flugfeld): nebeneinander statt übereinander
+  document.body.classList.toggle("twoBtns", inHarbor && !$("hangarBtn").hidden);
   if (!inHarbor && state.shopOpen) toggleShop(false);
   $("hpFill").style.width = `${clamp(me.hp / DEF.hp, 0, 1) * 100}%`;
   $("hpText").textContent = `${Math.max(0, Math.ceil(me.hp))} / ${DEF.hp}`;

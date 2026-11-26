@@ -297,3 +297,5 @@ body.missileAlert::after { content: ""; position: fixed; inset: 0; pointer-event
 #announce { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); max-width: 80vw; padding: 10px 18px; border-radius: 10px; z-index: 25;
   background: rgba(122,15,26,.92); border: 1px solid #c9a227; color: #fff; font-weight: 700; font-size: 16px; text-align: center; }
 #announce[hidden] { display: none; }
+body.twoBtns #hangarBtn { transform: translateX(calc(-100% - 6px)); }
+body.twoBtns #shopBtn { transform: translateX(6px); }
