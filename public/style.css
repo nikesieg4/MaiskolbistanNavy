@@ -191,3 +191,10 @@ body.missileAlert::after { content: ""; position: fixed; inset: 0; pointer-event
 .hangaropt small { font-size: 12px; font-weight: 400; opacity: .8; }
 .hangaropt .wicon { width: 64px; height: 32px; }
 #hangarClose { background: rgba(255,255,255,.12); color: inherit; }
+
+#hangarBtn { top: 96px; left: 50%; transform: translateX(-50%); font-size: 15px; padding: 8px 16px;
+  background: #9dffc0; color: #10301d; box-shadow: 0 4px 14px rgba(0,0,0,.4); animation: pulse3 1.6s ease-in-out infinite; }
+#hangarBtn:hover { background: #c4ffd8; }
+#hangarBtn[hidden] { display: none; }
+#hangarBtn kbd { position: static; margin-left: 6px; background: rgba(0,0,0,.15); }
+@keyframes pulse3 { 50% { box-shadow: 0 0 18px rgba(157,255,192,.8); } }

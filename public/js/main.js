@@ -1311,6 +1311,8 @@ function updateHud(me) {
     document.body.classList.toggle("missileAlert", ms.length > 0);
     $("jamWarn").hidden = !state.meInfo.jam;
     $("landedBanner").hidden = !state.landed;
+    // Hangar-Knopf: sichtbar, solange ein Luftfahrzeug mit wählbarer Bewaffnung gelandet ist
+    $("hangarBtn").hidden = !(state.landed && DEF.slots) || state.hangarOpen;
   }
   updateFrontHud(me);
   if (state.shopOpen && state.meInfo && state.meInfo.$ !== state.shopMoney) {
@@ -1489,6 +1491,7 @@ function toggleHangar(open = !state.hangarOpen) {
   if (open) renderHangar();
 }
 $("hangarClose").addEventListener("click", () => toggleHangar(false));
+$("hangarBtn").addEventListener("click", () => toggleHangar(true));
 
 const LOADOUT_TEXT = {
   marte: "Seezielflugkörper mit großer Reichweite gegen Schiffe",

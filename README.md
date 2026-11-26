@@ -51,7 +51,7 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 - **Landen:** Drohne langsam (S halten) über die eigene Bahn fliegen; Hubschrauber langsam über einem freien
   Landepunkt eines eigenen Trägers oder über dem Flugfeld schweben. Am Boden wird repariert und aufmunitioniert,
   auf dem Träger fährt man mit. Start mit W.
-- **Hangar (H, nur gelandet):** Bewaffnung wählen – wird im Konto gespeichert.
+- **Hangar (Knopf „🛩 Hangar – Bewaffnung“ oben in der Mitte oder Taste H, nur gelandet):** Bewaffnung wählen – wird im Konto gespeichert.
 
 | Fahrzeug | Waffenplatz-Optionen |
 |---|---|
