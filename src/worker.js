@@ -58,10 +58,18 @@ export default {
     }
     const path = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = Object.hasOwn(ASSETS, path) ? ASSETS[path] : null;
-    if (!file || request.method !== "GET") return new Response("Nicht gefunden", { status: 404 });
-    return new Response(file.body, {
-      headers: { "content-type": file.type, "cache-control": "public, max-age=60" },
-    });
+    const head = request.method === "HEAD";
+    if (!file || (request.method !== "GET" && !head)) return new Response("Nicht gefunden", { status: 404 });
+    const headers = { "content-type": file.type, "cache-control": "public, max-age=60" };
+    // Einbettung nur auf der eigenen Seite und auf spiele.maiskolbistan.app
+    if (file.type.startsWith("text/html")) {
+      headers["content-security-policy"] = "frame-ancestors 'self' https://spiele.maiskolbistan.app";
+    }
+    if (file.b64) {
+      headers["cache-control"] = "public, max-age=3600";
+      return new Response(head ? null : Uint8Array.from(atob(file.b64), (ch) => ch.charCodeAt(0)), { headers });
+    }
+    return new Response(head ? null : file.body, { headers });
   },
 };
 

@@ -89,6 +89,15 @@ scripts/build-assets.mjs  Bettet public/ in src/assets.gen.js ein
 Der Server ist autoritativ. Der Client berechnet sein eigenes Boot mit denselben Eingaben voraus,
 gleicht es mit dem Serverstand ab und blendet Korrekturen weich aus. Andere Boote werden mit ~110 ms Verzögerung interpoliert.
 
+## Vorschaubild (spiele.maiskolbistan.app)
+`public/vorschau.jpg` (1200 × 1200) und `public/vorschau_breit.jpg` (1200 × 600) werden aus den echten Spielgrafiken erzeugt
+und vom Worker unter `/vorschau.jpg` bzw. `/vorschau_breit.jpg` ausgeliefert. Neu erzeugen (lokaler Server muss laufen):
+```bash
+npm run dev
+node scripts/vorschau.cjs
+```
+Die Seite erlaubt Einbettung nur auf sich selbst und auf `https://spiele.maiskolbistan.app` (`frame-ancestors`).
+
 ## Entwickeln & Deployen
 ```bash
 npm install

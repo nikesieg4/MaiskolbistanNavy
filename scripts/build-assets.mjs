@@ -10,7 +10,10 @@ const types = {
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".json": "application/json",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
 };
+const BINARY = new Set([".jpg", ".png"]);
 
 const files = {};
 (function walk(dir) {
@@ -18,7 +21,11 @@ const files = {};
     const p = join(dir, name);
     if (statSync(p).isDirectory()) walk(p);
     else if (types[extname(p)]) {
-      files["/" + relative(root, p).split("\\").join("/")] = { type: types[extname(p)], body: readFileSync(p, "utf8") };
+      const ext = extname(p);
+      const key = "/" + relative(root, p).split("\\").join("/");
+      files[key] = BINARY.has(ext)
+        ? { type: types[ext], b64: readFileSync(p).toString("base64") }
+        : { type: types[ext], body: readFileSync(p, "utf8") };
     }
   }
 })(root);
