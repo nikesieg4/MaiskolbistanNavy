@@ -196,6 +196,12 @@ const waterPattern = ctx.createPattern(waterTile, "repeat");
 // ---------------- Eingabe ----------------
 addEventListener("keydown", (e) => {
   if (!state.playing) return;
+  if (e.target && e.target.tagName === "INPUT") return; // Chat-Eingabe
+  if (e.key === "Enter" && !e.repeat) {
+    e.preventDefault();
+    openChat();
+    return;
+  }
   const k = e.key.toLowerCase();
   keys.add(k);
   if (k === " " || k === "x") state.throttle = 0;
@@ -225,6 +231,70 @@ addEventListener(
   },
   { passive: true }
 );
+
+// ---------------- Chat ----------------
+const chat = { open: false, team: false, last: 0 };
+function openChat() {
+  if (!state.playing) return;
+  chat.open = true;
+  keys.clear(); // keine hängenden Steuertasten
+  $("chat").classList.add("open");
+  $("chatForm").hidden = false;
+  $("chatInput").focus();
+}
+function closeChat() {
+  chat.open = false;
+  $("chat").classList.remove("open");
+  $("chatForm").hidden = true;
+  $("chatInput").value = "";
+  $("chatInput").blur();
+}
+function setChatScope(team) {
+  chat.team = team;
+  $("chatScope").textContent = team ? "Team" : "Alle";
+  $("chatScope").classList.toggle("team", team);
+}
+function addChatLine(m) {
+  const log = $("chatLog");
+  const el = document.createElement("div");
+  el.className = "cl" + (m.sys ? " sys" : "");
+  if (m.sys) {
+    el.textContent = m.m;
+  } else {
+    if (m.to) {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = "[Team]";
+      el.appendChild(tag);
+    }
+    const who = document.createElement("b");
+    who.className = `t${m.tm}`;
+    who.textContent = `${m.n}:`;
+    el.append(who, document.createTextNode(m.m));
+  }
+  log.appendChild(el);
+  while (log.children.length > 8) log.firstChild.remove();
+  setTimeout(() => el.classList.add("old"), 12000);
+}
+$("chatForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("chatInput").value.trim();
+  if (text && state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ t: "chat", m: text, team: chat.team }));
+  closeChat();
+});
+$("chatInput").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeChat();
+  if (e.key === "Tab") {
+    e.preventDefault();
+    setChatScope(!chat.team);
+  }
+  e.stopPropagation();
+});
+$("chatScope").addEventListener("click", () => {
+  setChatScope(!chat.team);
+  $("chatInput").focus();
+});
+$("chatBtn").addEventListener("click", () => (chat.open ? closeChat() : openChat()));
 
 function zoomBy(f) {
   if (!state.playing || state.radarK > 0) return;
@@ -427,6 +497,7 @@ function onMessage(m) {
       renderPlayerList();
       break;
     case "dead":
+      closeChat();
       state.dead = { by: m.by, x: m.x, y: m.y, h: m.h, time: performance.now(), heli: isAir(BOATS[m.type] || {}) };
       state.pred = null;
       if (state.dead.heli) combat.crashAt(m.x, m.y, m.h);
@@ -447,6 +518,9 @@ function onMessage(m) {
         toggleShop(false);
         showToast(`Du fährst jetzt: ${DEF.label}`, "ok");
       }
+      break;
+    case "chat":
+      addChatLine(m);
       break;
     case "reward":
       showToast(`+${m.a.toLocaleString("de-DE")} Taler · ${m.m}`, "money");

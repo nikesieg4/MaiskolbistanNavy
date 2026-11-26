@@ -66,6 +66,11 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
   Locks auf Ziele in der Nähe bauen sich nicht auf, gelenkte Flugkörper können ihr Ziel verlieren. Der Störer sendet
   selbst – ARM können sich auf ihn aufschalten.
 
+## Chat
+- **Enter** (oder 💬 rechts, fürs iPad) öffnet den Chat, Enter sendet, Esc schließt. **Tab** bzw. der Knopf links wechselt zwischen „Alle“ und „Team“.
+- Höchstens 140 Zeichen, eine Nachricht pro 0,7 s. Die letzten 8 Zeilen stehen links unten und blenden nach 12 s aus.
+- Entwickler-Befehl: `:DEV_GIVE_TALER_<Wert>` schreibt den Wert sofort aufs eigene Konto (max. 1 Mrd.). Der Befehl erscheint nur beim Absender, nicht im Chat der anderen. **Achtung:** Jeder, der den Befehl kennt, kann ihn benutzen.
+
 ## Landedecks und Hubschrauber-Start
 - Hubschrauber wählen beim Start, wo sie erscheinen: Flugfeld (unbegrenzt) oder ein Schiff des eigenen Teams mit Landedeck.
 - Jedes Landedeck trägt genau einen Hubschrauber: Fregatte Sachsen (F124), Arleigh Burke und LCS Independence je 1 Platz, die Träger Ähre und America je 6.
@@ -102,6 +107,7 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 | E | Fähigkeit: Radar-Rundumsuche (Schiffe, Drohnen) bzw. Täuschkörper (Hubschrauber) |
 | T | Radar ein/aus (Schiffe) |
 | H | Hangar (gelandet) |
+| Enter | Chat (Tab: Alle/Team) |
 | Q / C | Höhe: steigen / sinken (Hubschrauber, Drohnen) |
 | + / − | Zoomen (auch Mausrad, Knöpfe rechts unten fürs iPad, Zwei-Finger-Pinch) |
 | B | Schiffsladen (im eigenen Hafen) |

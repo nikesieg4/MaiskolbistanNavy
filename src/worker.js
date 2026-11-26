@@ -53,7 +53,7 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 10;
+const WORLD_VERSION = 11;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
 const RAFT_LIFE = 90; // s
 
@@ -215,6 +215,37 @@ export class World {
     }
   }
 
+  // Chat: an alle oder nur ans eigene Team; ":DEV_GIVE_TALER_<Wert>" ist ein Entwickler-Befehl
+  chat(p, msg) {
+    const text = String(msg.m ?? "")
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e]/g, "")
+      .trim()
+      .slice(0, 140);
+    if (!text) return;
+    const dev = /^:DEV_GIVE_TALER_(\d{1,12})$/i.exec(text);
+    if (dev) {
+      const amount = Math.min(+dev[1], 1e9);
+      if (amount > 0 && p.acct) {
+        p.acct.money += amount;
+        p.acct.dirty = true;
+        this.flushAccounts();
+      }
+      this.send(p.ws, { t: "chat", sys: true, m: `Dev: +${amount.toLocaleString("de-DE")} Taler` });
+      return;
+    }
+    const now = Date.now();
+    if (now - (p.chatT || 0) < 700) return; // Spam-Bremse
+    p.chatT = now;
+    const toTeam = !!msg.team;
+    const data = JSON.stringify({ t: "chat", id: p.id, n: p.name, tm: p.team, m: text, to: toTeam });
+    for (const o of this.players.values()) {
+      if (toTeam && o.team !== p.team) continue;
+      try {
+        o.ws.send(data);
+      } catch {}
+    }
+  }
+
   addMoney(p, amount, why) {
     if (!p || !p.acct || amount <= 0) return;
     p.acct.money += Math.round(amount);
@@ -367,6 +398,8 @@ export class World {
         this.buy(player, msg.ship);
       } else if (msg.t === "switch") {
         this.switchShip(player, msg.ship);
+      } else if (msg.t === "chat") {
+        this.chat(player, msg);
       } else if (msg.t === "loadout") {
         this.setLoadout(player, msg.slot | 0, String(msg.w || ""));
       }
