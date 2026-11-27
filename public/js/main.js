@@ -387,7 +387,7 @@ function buildWeaponBar() {
   const parts = state.myWeapons.map((w, i) => {
     const u = WEAPON_UI[w];
     const W = WEAPONS[w];
-    const cells = W.kind === "ssm" ? DEF.ssm.length : ["agm", "arm", "aam", "bomb", "torp"].includes(W.kind) ? (DEF.mags && DEF.mags[w]) || W.count : 0;
+    const cells = W.kind === "ssm" ? DEF.ssm.length : ["agm", "arm", "aam", "bomb", "torp", "buoy"].includes(W.kind) ? (DEF.mags && DEF.mags[w]) || W.count : 0;
     const extra = cells ? `<div class="cells" id="w_${w}_c">${"<i></i>".repeat(cells)}</div>` : `<div class="wbar"><div id="w_${w}_b"></div></div>`;
     return `<div class="wslot" data-w="${w}"><kbd>${i + 1}</kbd>${u.icon}<div class="wname">${u.name} <span id="w_${w}_n"></span></div><div class="wsub" id="w_${w}_s">${u.sub}</div>${extra}</div>`;
   });
@@ -1128,7 +1128,7 @@ function drawBuoys(t) {
     ctx.arc(x, y, WEAPONS.sonobuoy.sonar * state.envF.sonar, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
-    const r = ((t * 12 + x) % 30) + 3;
+    const r = (((t * 12 + x) % 30) + 30) % 30 + 3; // auch bei negativen Koordinaten positiv
     ctx.strokeStyle = `rgba(230,245,255,${0.5 * (1 - r / 33)})`;
     ctx.lineWidth = 0.6;
     ctx.beginPath();
@@ -1723,6 +1723,7 @@ function updateWeaponBar() {
         if (W.kind === "agm" || W.kind === "bomb") setText(`w_${w}_s`, lockedShip ? "→ Lock-Ziel" : teamMark && W.kind === "agm" ? "→ Team-Markierung" : "→ Mauszeiger");
         else if (W.kind === "aam") setText(`w_${w}_s`, W.ir ? "Infrarot · Ziel am Zeiger" : lockedAir ? "→ Lock-Ziel" : "Lock (R) für große Reichweite");
         else if (W.kind === "torp") setText(`w_${w}_s`, lockedNaval ? "→ Lock-Ziel" : "→ Mauszeiger, sucht selbst");
+        else if (W.kind === "buoy") setText(`w_${w}_s`, `${(state.buoys || []).length} im Wasser · F abwerfen`);
         else setText(`w_${w}_s`, "jagt sendende Radare");
       }
     }

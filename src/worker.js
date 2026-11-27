@@ -1568,6 +1568,10 @@ export class World {
       this.events.push(["torp", x, y, pr.h]);
     } else if (W.kind === "buoy") {
       if (st.n <= 0) return;
+      if (isOnLand(this.map, b.x, b.y)) {
+        this.send(p.ws, { t: "lockmsg", m: "Sonarbojen nur über Wasser abwerfen" });
+        return;
+      }
       st.n--;
       st.cd = W.interval;
       this.buoys.push({ team: p.team, x: b.x, y: b.y, t: this.tick });
