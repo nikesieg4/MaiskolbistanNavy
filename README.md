@@ -98,6 +98,24 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
   - Sturm stört das Sonar und bremst Schiffe; kleine Boote bremst er stärker.
 - Uhrzeit und Wetter stehen im HUD.
 
+## Flugzeugträger
+| Typ | Nation | Länge | Katapulte | Abstellplätze | Abwehr |
+|---|---|---|---|---|---|
+| Charles de Gaulle (R91) | Maiskolbistan | 261 m | 2 | 8 | Aster 15, RAM |
+| Gerald R. Ford (CVN-78) | Paprikistan | 333 m | 4 | 9 | ESSM, SeaRAM |
+- **Freischaltung:** ab Korvettenkapitän, 15.000 Taler. Kopfgeld 5.000 Taler.
+- **Start:** Die Träger starten vor dem Hafen, weil sie nicht ins Hafenbecken passen.
+- **Auf dem Deck starten:** Alle Jets des Teams können hier starten. Landjäger stehen auf einem Abstellplatz und starten mit **W** per Katapult. Senkrechtstarter heben senkrecht ab.
+- **Fangseil-Landung:** Jets langsam (≤ 95 m/s) und unter 60 m über das Deck fliegen.
+- **Abstellplätze:** Jeder Platz trägt ein Luftfahrzeug (Jet, Hubschrauber oder TB3), bis es zerstört ist.
+
+## Bayraktar TB3 (U-Jagd-Drohne)
+- **Verfügbarkeit:** für beide Nationen, ab Obermaat, kostenlos. Startet vom Flugfeld oder vom Deck jedes eigenen Trägers (Ähre, America, CdG, Ford).
+- **Start und Landung:** Kurzstart über den Bug. Landen langsam und unter 60 m über einem eigenen Trägerdeck.
+- **Bewaffnung:**
+  - Leichttorpedos: MU90 bzw. Mk 54.
+  - 6 Sonarbojen: Eine Boje hört 90 s lang U-Boote im Umkreis von 2,5 km für das ganze Team. Sie wird mit gestricheltem Kreis angezeigt.
+
 ## Kampfflugzeuge
 | Typ | Nation | Start | Bewaffnung (Hangar-Platz 3 wählbar) |
 |---|---|---|---|

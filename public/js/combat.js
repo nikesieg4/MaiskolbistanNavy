@@ -97,6 +97,17 @@ export function spawnEvent(e) {
     case "spray":
       burst(x, y, 3, 3, { r: 0.6, grow: 0.6, life: 0.6, color: "235,248,255", alpha: 0.7, drag: 3 });
       break;
+    case "catapult":
+      // Katapultstart: Dampfwolke am Katapult
+      for (let i = 0; i < 18; i++) puff(x - Math.cos(h) * rand(0, 60), y - Math.sin(h) * rand(0, 60), { vx: rand(-4, 4), vy: rand(-4, 4), r: 2, grow: 3, life: rand(1.2, 2.2), color: "245,245,245", alpha: 0.55, drag: 1.5 });
+      break;
+    case "trap":
+      // Fangseil: Reifenqualm beim Aufsetzen
+      burst(x, y, 10, 8, { r: 1.2, grow: 2, life: 1.2, color: "200,200,200", alpha: 0.5, drag: 2 });
+      break;
+    case "buoy":
+      splash(x, y, 1.5);
+      break;
     case "torp":
       // Torpedoausstoß: Luftblasen
       burst(x, y, 10, 6, { r: 0.8, grow: 0.8, life: 1.6, color: "220,240,255", alpha: 0.7, drag: 2 });

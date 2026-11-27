@@ -245,7 +245,11 @@ function armUnder(ctx, x, y, present) {
 
 export function drawDroneShadow(ctx, type, alpha = 0.25) {
   ctx.fillStyle = `rgba(0,15,30,${alpha})`;
-  if (type === "heron") {
+  if (type === "tb3" || type === "tb3p") {
+    ctx.fillRect(-4.2, -0.5, 8.3, 1);
+    ctx.fillRect(-0.4, -7, 1.4, 14);
+    ctx.fillRect(-4.3, -2, 0.6, 4);
+  } else if (type === "heron") {
     ctx.fillRect(-6, -0.6, 13, 1.2);
     ctx.fillRect(-0.6, -13, 1.6, 26);
     ctx.fillRect(-6.5, -2.4, 0.5, 4.8);
@@ -496,4 +500,146 @@ export function drawPod(ctx, kind, x, y, present = true, t = 0) {
     }
   }
   ctx.restore();
+}
+
+// ---------- Bayraktar TB3 (trägergestützte U-Jagd-Drohne) ----------
+// 8,35 m lang, 14 m Spannweite, Zugpropeller am Bug, gerade Flügel mit Klappgelenk, V-Leitwerk.
+// anim: { t, seed, n (Torpedos übrig), flag }
+export function drawTB3(ctx, a) {
+  const t = a.t || 0;
+  const ph = ((a.seed || 0) % 1000) / 97;
+  const n = a.n ?? 2;
+  // Außenlasten unter den Flügeln: Leichttorpedos innen, Bojenbehälter außen
+  for (const s of [-1, 1]) {
+    if ((s < 0 ? 0 : 1) < n) {
+      ctx.fillStyle = "#3f4a4f";
+      ctx.beginPath();
+      ctx.roundRect(-1.7, s * 2.2 - 0.17, 2.9, 0.34, 0.17);
+      ctx.fill();
+      ctx.fillStyle = "#c9a227";
+      ctx.fillRect(0.7, s * 2.2 - 0.17, 0.08, 0.34);
+    }
+    ctx.fillStyle = "#c9ccc6";
+    ctx.beginPath();
+    ctx.roundRect(-1.2, s * 4.4 - 0.2, 2.0, 0.4, 0.2);
+    ctx.fill();
+    ctx.fillStyle = "#e0a020";
+    for (let i = 0; i < 3; i++) ctx.fillRect(-1.0 + i * 0.55, s * 4.4 - 0.08, 0.25, 0.16);
+  }
+  // Flügel: gerade, leicht verjüngt, Klappgelenk bei ±3,4 m, Winglets
+  const wg = ctx.createLinearGradient(0, -7, 0, 7);
+  wg.addColorStop(0, "#cfd3d6");
+  wg.addColorStop(0.5, "#e4e7e9");
+  wg.addColorStop(1, "#b9bec1");
+  ctx.fillStyle = wg;
+  ctx.beginPath();
+  ctx.moveTo(1.1, -0.4);
+  ctx.lineTo(0.75, -6.8);
+  ctx.lineTo(-0.15, -7.0);
+  ctx.lineTo(-0.45, -0.4);
+  ctx.lineTo(-0.45, 0.4);
+  ctx.lineTo(-0.15, 7.0);
+  ctx.lineTo(0.75, 6.8);
+  ctx.lineTo(1.1, 0.4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 0.04;
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = 0.05;
+  ctx.beginPath();
+  ctx.moveTo(1.0, -3.4);
+  ctx.lineTo(-0.35, -3.4);
+  ctx.moveTo(1.0, 3.4);
+  ctx.lineTo(-0.35, 3.4);
+  // Querruder und Klappen
+  ctx.moveTo(-0.1, -6.6);
+  ctx.lineTo(-0.3, -3.6);
+  ctx.moveTo(-0.1, 6.6);
+  ctx.lineTo(-0.3, 3.6);
+  ctx.stroke();
+  ctx.fillStyle = "#9aa0a4";
+  ctx.fillRect(-0.15, -7.05, 0.85, 0.12);
+  ctx.fillRect(-0.15, 6.93, 0.85, 0.12);
+  // Rumpf: schlank, SATCOM-Buckel hinter dem Propeller
+  const g = ctx.createLinearGradient(0, -0.55, 0, 0.55);
+  g.addColorStop(0, "#9ea4a8");
+  g.addColorStop(0.4, "#eef0f1");
+  g.addColorStop(1, "#8f969a");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(4.0, 0);
+  ctx.bezierCurveTo(3.9, -0.5, 3.0, -0.6, 2.0, -0.55);
+  ctx.lineTo(-3.6, -0.3);
+  ctx.lineTo(-4.2, 0);
+  ctx.lineTo(-3.6, 0.3);
+  ctx.lineTo(2.0, 0.55);
+  ctx.bezierCurveTo(3.0, 0.6, 3.9, 0.5, 4.0, 0);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 0.04;
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  ctx.beginPath();
+  ctx.ellipse(2.4, -0.05, 0.9, 0.35, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Kamerakugel (EO/IR) unter dem Rumpf sichtbar als Kreis
+  ctx.fillStyle = "#2e3438";
+  ctx.beginPath();
+  ctx.arc(1.4, 0.32, 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  // V-Leitwerk
+  ctx.fillStyle = "#c3c8cb";
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(-2.9, s * 0.2);
+    ctx.lineTo(-3.9, s * 2.0);
+    ctx.lineTo(-4.4, s * 2.0);
+    ctx.lineTo(-4.0, s * 0.15);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Plattenfugen
+  ctx.strokeStyle = "rgba(0,0,0,0.22)";
+  ctx.lineWidth = 0.035;
+  ctx.beginPath();
+  for (const x of [3.1, 1.0, -1.5, -2.8]) {
+    ctx.moveTo(x, -0.5);
+    ctx.lineTo(x, 0.5);
+  }
+  ctx.stroke();
+  if (a.flag) {
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = a.flag.colors[i];
+      if (a.flag.dir === "vertical") ctx.fillRect(-2.4 + i * 0.25, -0.3, 0.25, 0.3);
+      else ctx.fillRect(-2.4, -0.3 + i * 0.1, 0.75, 0.1);
+    }
+  }
+  // Zugpropeller am Bug
+  ctx.fillStyle = "#3a3a3a";
+  ctx.beginPath();
+  ctx.arc(4.05, 0, 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  const spin = t * 60 + ph;
+  ctx.fillStyle = "rgba(40,40,40,0.25)";
+  ctx.beginPath();
+  ctx.ellipse(4.15, 0, 0.12, 1.25, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(30,30,30,0.7)";
+  ctx.lineWidth = 0.1;
+  ctx.beginPath();
+  ctx.moveTo(4.15, Math.sin(spin) * 1.2);
+  ctx.lineTo(4.15, -Math.sin(spin) * 1.2);
+  ctx.stroke();
+  if (Math.sin(t * 5 + ph) > 0.7) {
+    ctx.fillStyle = "rgba(255,80,60,0.9)";
+    ctx.beginPath();
+    ctx.arc(0.3, -7.0, 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(60,255,100,0.9)";
+    ctx.beginPath();
+    ctx.arc(0.3, 7.0, 0.18, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }

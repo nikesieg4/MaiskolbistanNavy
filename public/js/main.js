@@ -22,6 +22,7 @@ import {
   isAir,
   START_SHIP,
   DRONE_OF,
+  TB3_OF,
   SENSORS,
   FRONT,
   envFactors,
@@ -657,6 +658,7 @@ function onSnapshot(m) {
   for (const p of m.p) if (p[23] !== undefined) state.ranks.set(p[0], p[23]);
   state.marked = new Set(m.mk || []);
   state.rafts = m.rf || [];
+  state.buoys = m.bo || [];
   // Gegner, die nicht mehr erfasst sind, bleiben kurz als „zuletzt gesehen“ stehen
   const nowS = performance.now() / 1000;
   for (const p of m.p) {
@@ -1116,6 +1118,35 @@ function drawThreats(me, w, h, zoom, t) {
 }
 
 // Schiffbrüchige in Rettungsinseln (blinkendes Notlicht)
+// Sonarbojen des eigenen Teams: Boje mit Blinklicht, Wasserringe, gestrichelter Hörbereich
+function drawBuoys(t) {
+  for (const [x, y, k] of state.buoys || []) {
+    ctx.strokeStyle = `rgba(120,220,255,${0.18 * k + 0.05})`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([18, 14]);
+    ctx.beginPath();
+    ctx.arc(x, y, WEAPONS.sonobuoy.sonar * state.envF.sonar, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const r = ((t * 12 + x) % 30) + 3;
+    ctx.strokeStyle = `rgba(230,245,255,${0.5 * (1 - r / 33)})`;
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#e8a01c";
+    ctx.beginPath();
+    ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    if (Math.sin(t * 4 + x) > 0.3) {
+      ctx.fillStyle = "rgba(255,80,60,0.95)";
+      ctx.beginPath();
+      ctx.arc(x, y, 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 function drawRafts(t) {
   for (const [id, x, y] of state.rafts) {
     ctx.save();
@@ -1331,6 +1362,7 @@ function render(now) {
   drawCloudShadows(ctx, view, F, t);
   combat.drawEffectsBelow(ctx, t);
   drawRafts(t);
+  drawBuoys(t);
 
   const info = state.meInfo;
   // U-Boote zuerst (liegen unter Wasser), dann Schiffe
@@ -2130,6 +2162,7 @@ const pv = $("preview");
 function choiceType() {
   const c = state.spawnChoice;
   if (c === "drone") return DRONE_OF[state.team];
+  if (c.startsWith("tb3:")) return TB3_OF[state.team];
   if (c.startsWith("jet:")) return BOATS[c.split(":")[1]] ? c.split(":")[1] : START_SHIP[state.team];
   if (c.startsWith("heli")) return state.team === 0 ? "nh90" : "blackhawk";
   return BOATS[c] && BOATS[c].team === state.team ? c : START_SHIP[state.team];
@@ -2251,11 +2284,11 @@ function renderSpawnOptions() {
       continue;
     }
     opts.push({ key: `jet:${key}:af`, label: def.short, sub: "von der Startbahn", ok: true });
-    if (def.vtol) {
-      for (const c of carriers) {
-        if (!BOATS[c.ship] || !BOATS[c.ship].carrier) continue;
-        opts.push({ key: `jet:${key}:${c.id}`, label: `${def.short} · ${c.name}`, sub: `Trägerdeck · ${c.free > 0 ? `${c.free} frei` : "belegt"}`, ok: c.free > 0 });
-      }
+    // Senkrechtstarter auf jedem Träger, alle anderen Jets per Katapult vom Flugzeugträger
+    for (const c of carriers) {
+      const cd = BOATS[c.ship];
+      if (!cd || !(def.vtol ? cd.carrier : cd.airCarrier)) continue;
+      opts.push({ key: `jet:${key}:${c.id}`, label: `${def.short} · ${c.name}`, sub: `${cd.airCarrier && !def.vtol ? "Katapult" : "Trägerdeck"} · ${c.free > 0 ? `${c.free} frei` : "belegt"}`, ok: c.free > 0 });
     }
   }
   opts.push({ key: "heli:af", label: BOATS[heli].short, sub: "vom Flugfeld", ok: true });
@@ -2271,6 +2304,15 @@ function renderSpawnOptions() {
     });
   }
   opts.push({ key: "drone", label: BOATS[DRONE_OF[team]].short, sub: "vom Flugfeld · ARM/Störpod", ok: true });
+  // Bayraktar TB3: U-Jagd-Drohne vom Flugfeld oder einem Trägerdeck
+  const tb3 = BOATS[TB3_OF[team]];
+  const tbOk = myRank >= tb3.rank;
+  opts.push({ key: "tb3:af", label: tb3.short, sub: tbOk ? "vom Flugfeld · U-Jagd" : `ab ${RANKS[tb3.rank].name}`, ok: tbOk });
+  for (const c of carriers) {
+    const cd = BOATS[c.ship];
+    if (!cd || !cd.carrier) continue;
+    opts.push({ key: `tb3:${c.id}`, label: `${tb3.short} · ${c.name}`, sub: tbOk ? `Trägerdeck · ${c.free > 0 ? `${c.free} frei` : "belegt"}` : `ab ${RANKS[tb3.rank].name}`, ok: tbOk && c.free > 0 });
+  }
   if (!opts.some((o) => o.key === state.spawnChoice && o.ok && !o.buy)) state.spawnChoice = START_SHIP[team];
   optionButtons(box, opts, state.spawnChoice, (k) => {
     if (k.startsWith("buy:")) return buyFromMenu(k.slice(4));

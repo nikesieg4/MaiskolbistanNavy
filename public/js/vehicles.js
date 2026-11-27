@@ -4,7 +4,8 @@ import { drawGepard, GEPARD_EXHAUSTS, hullPath as gepardHull } from "./gepard.js
 import { drawCarrier, CARRIER_EXHAUSTS, hullPath as carrierHull } from "./carrier.js";
 import { drawBlackhawk, drawBlackhawkShadow, fuselagePath } from "./heli.js";
 import { drawK130, drawF124, drawCyclone, drawLCS, drawBurke, EXHAUSTS, hullPath, lcsOutline } from "./warships.js";
-import { drawNH90, drawNH90Shadow, drawHeron, drawReaper, drawDroneShadow, nhPath } from "./aircraft.js";
+import { drawNH90, drawNH90Shadow, drawHeron, drawReaper, drawTB3, drawDroneShadow, nhPath } from "./aircraft.js";
+import { drawSupercarrier } from "./supercarrier.js";
 import { finish, pathFrom } from "./shade.js";
 import { drawJet, drawJetShadow } from "./jets.js";
 import { drawSub } from "./subs.js";
@@ -65,7 +66,7 @@ export function drawVehicle(ctx, type, anim) {
   // Seezielflugkörper-Zellen (leer = abgefeuert) aus dem Waffenstatus
   const ssmIdx = weapons.findIndex((w) => WEAPONS[w]?.kind === "ssm");
   const exo = anim.ammo && ssmIdx >= 0 && Array.isArray(anim.ammo[ssmIdx]) ? anim.ammo[ssmIdx].map((v) => v <= 0) : undefined;
-  const air = weapons.findIndex((w) => ["agm", "arm", "sam", "rkt", "jam"].includes(WEAPONS[w]?.kind) && def.kind !== "ship");
+  const air = weapons.findIndex((w) => ["agm", "arm", "sam", "rkt", "jam", "torp"].includes(WEAPONS[w]?.kind) && def.kind !== "ship");
   const n = anim.ammo && air >= 0 && anim.ammo[air] ? anim.ammo[air][0] : undefined;
   const pod = def.kind !== "ship" ? weapons[weapons.length - 1] : undefined;
   const a = { ...anim, exo, n: pod === "jammer" ? undefined : n, pod, ssmCells: def.ssm };
@@ -108,6 +109,12 @@ function drawBody(ctx, type, def, a) {
       return drawHeron(ctx, a);
     case "reaper":
       return drawReaper(ctx, a);
+    case "tb3":
+    case "tb3p":
+      return drawTB3(ctx, a);
+    case "cdg":
+    case "ford":
+      return drawSupercarrier(ctx, type, a);
   }
 }
 

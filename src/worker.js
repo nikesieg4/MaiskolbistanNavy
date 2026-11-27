@@ -58,6 +58,7 @@ import {
   seasonOf,
   seasonEnd,
   WEATHER,
+  TB3_OF,
 } from "../public/shared/sim.js";
 const WEATHER_COUNT = WEATHER.length;
 import ASSETS from "./assets.gen.js";
@@ -68,7 +69,7 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 14;
+const WORLD_VERSION = 15;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
 
 // ---------- Konten: Anmeldung ----------
@@ -178,6 +179,7 @@ export class World {
     this.players = new Map(); // id -> player
     this.projectiles = [];
     this.rafts = []; // Schiffbrüchige: { id, x, y, t }
+    this.buoys = []; // Sonarbojen: { team, x, y, t }
     this.events = []; // Effekte dieses Ticks: [typ, x, y, ...]
     this.accounts = new Map(); // Konto-ID -> { id, money, owned, xp, …, dirty }
     this.tokenIds = new Map(); // Schlüssel -> Konto-ID (Zwischenspeicher)
@@ -924,6 +926,23 @@ export class World {
   chooseSpawn(team, want, loc, acct) {
     const start = START_SHIP[team];
     const fallback = (note) => ({ type: start, spawn: this.spawnInHarbor(team, BOATS[start]), note });
+    if (want.startsWith("tb3:")) {
+      // Bayraktar TB3: vom Flugfeld ("tb3:af") oder vom Deck eines Trägers ("tb3:<id>")
+      const tt = TB3_OF[team];
+      const td = BOATS[tt];
+      if (rankOf(acct.xp) < td.rank) return fallback(`Bayraktar TB3 ab Dienstgrad ${RANKS[td.rank].name}.`);
+      const where = want.slice(4);
+      if (where !== "af") {
+        const c = this.players.get(+where);
+        if (c && c.team === team && BOATS[c.type].carrier && this.freeHeliSpots(c) > 0) {
+          const spot = this.freeSpot(c);
+          const s = heliSpotWorld(c.b, spot, BOATS[c.type]);
+          return { type: tt, spawn: { ...s, spot }, carrierId: c.id };
+        }
+        return { type: tt, spawn: droneSpawn(team), note: "Trägerdeck nicht mehr frei – Start vom Flugfeld." };
+      }
+      return { type: tt, spawn: droneSpawn(team) };
+    }
     if (want === "drone") {
       return { type: DRONE_OF[team], spawn: droneSpawn(team) };
     }
@@ -943,9 +962,11 @@ export class World {
       const jd = BOATS[jt];
       if (!jd || jd.kind !== "jet" || jd.team !== team) return fallback();
       if (!acct.owned.includes(jt)) return fallback(`${jd.short} noch nicht gekauft – Start mit dem Standardschiff.`);
-      if (where && where !== "af" && jd.vtol) {
+      if (where && where !== "af") {
+        // Senkrechtstarter auf jedem Träger, alle anderen Jets nur auf Flugzeugträgern (Katapult)
         const c = this.players.get(+where);
-        if (c && c.team === team && BOATS[c.type].carrier && this.freeHeliSpots(c) > 0) {
+        const cd = c && BOATS[c.type];
+        if (c && c.team === team && (jd.vtol ? cd.carrier : cd.airCarrier) && this.freeHeliSpots(c) > 0) {
           const spot = this.freeSpot(c);
           const s = heliSpotWorld(c.b, spot, BOATS[c.type]);
           return { type: jt, spawn: { ...s, spot }, carrierId: c.id };
@@ -1094,6 +1115,39 @@ export class World {
   checkLanding(p) {
     const def = BOATS[p.type];
     if (p.landed || !isAir(def) || p.ackLaunch > 0) return;
+    // Fangseil-Landung: Jets langsam und tief über dem Deck eines eigenen Flugzeugträgers,
+    // die TB3 auf jedem eigenen Träger
+    const deckLanding = (def.kind === "jet" && Math.abs(p.b.v) <= def.landSpeed) || (def.carrierDrone && Math.abs(p.b.v) <= def.minSpeed + 6);
+    if (deckLanding && (p.b.z || 0) <= 60) {
+      for (const c of this.players.values()) {
+        const cd = BOATS[c.type];
+        if (!(def.carrierDrone ? cd.carrier : cd.airCarrier) || c.team !== p.team) continue;
+        const dx = p.b.x - c.b.x;
+        const dy = p.b.y - c.b.y;
+        const co = Math.cos(c.b.h);
+        const si = Math.sin(c.b.h);
+        const lx = dx * co + dy * si;
+        const ly = -dx * si + dy * co;
+        if (Math.abs(lx) > cd.length / 2 || Math.abs(ly) > (cd.deckBeam || cd.beam) / 2) continue;
+        const landedHere = new Set([...this.players.values()].filter((o) => o !== p && o.landed && o.landed.carrierId === c.id).map((o) => o.landed.spot));
+        const reserved = new Set([...this.players.values()].filter((o) => o !== p && o.carrierId === c.id).map((o) => o.spot));
+        let spot = cd.heliSpots.findIndex((_, i) => !landedHere.has(i) && !reserved.has(i));
+        if (spot < 0) spot = cd.heliSpots.findIndex((_, i) => !landedHere.has(i));
+        if (spot < 0) {
+          if (!p.deckFullMsg || this.tick - p.deckFullMsg > 60) {
+            p.deckFullMsg = this.tick;
+            this.send(p.ws, { t: "lockmsg", m: "Deck voll – kein Abstellplatz frei" });
+          }
+          continue;
+        }
+        p.landed = { kind: "carrier", carrierId: c.id, spot };
+        p.b.v = 0;
+        p.b.z = p.b.zt = 0;
+        this.events.push(["trap", p.b.x, p.b.y, p.b.h]);
+        this.send(p.ws, { t: "landed", where: `Fangseil – Träger von ${c.name}` });
+        return;
+      }
+    }
     // Bahnlandung: Drohnen und Jets langsam und tief über der eigenen Bahn
     const slowEnough = def.kind === "drone" ? Math.abs(p.b.v) <= def.minSpeed + 4 : def.kind === "jet" && Math.abs(p.b.v) <= def.landSpeed;
     if (def.kind === "drone" || (def.kind === "jet" && (!def.vtol || Math.abs(p.b.v) > 8))) {
@@ -1141,6 +1195,25 @@ export class World {
   takeOff(p) {
     const def = BOATS[p.type];
     const hover = p.landed && (p.landed.kind === "carrier" || p.landed.pad);
+    // Katapultstart vom Flugzeugträger (alle Jets außer Senkrechtstartern); TB3: Kurzstart über den Bug
+    if (((def.kind === "jet" && !def.vtol) || def.carrierDrone) && p.landed && p.landed.kind === "carrier") {
+      const c = this.players.get(p.landed.carrierId);
+      const cd = c && BOATS[c.type];
+      if (cd) {
+        const cat = cd.catapult || { x: cd.length * 0.3, y: 0 };
+        const co = Math.cos(c.b.h);
+        const si = Math.sin(c.b.h);
+        const x = c.b.x + cat.x * co - cat.y * si;
+        const y = c.b.y + cat.x * si + cat.y * co;
+        const v0 = def.kind === "jet" ? Math.max(def.minSpeed + 15, 95) : def.minSpeed + 10;
+        Object.assign(p.b, { x, y, h: c.b.h, v: v0 + Math.max(0, c.b.v), w: 0, z: 20, zt: 600 });
+        this.events.push(["catapult", x, y, c.b.h]);
+        p.landed = null;
+        p.ackLaunch = 3;
+        this.send(p.ws, { t: "landed", where: null });
+        return;
+      }
+    }
     if (def.kind === "drone" || (def.kind === "jet" && !(def.vtol && hover))) {
       const s = runwayStart(p.team);
       Object.assign(p.b, { x: s.x, y: s.y, h: s.h, v: def.kind === "jet" ? Math.max(60, def.minSpeed) : def.minSpeed, w: 0, z: 0, zt: def.kind === "jet" ? 800 : 900 });
@@ -1165,6 +1238,7 @@ export class World {
   }
 
   spawnCarrier(team, def) {
+    if (def.length > 270) return this.spawnOutside(team, 260); // Superträger passen nicht ins Hafenbecken
     const s = carrierSpawn(team);
     const blocked = [...this.players.values()].some(
       (p) => BOATS[p.type].kind === "ship" && Math.abs(p.b.y - s.y) < 45 && Math.abs(p.b.x - s.x) < def.length / 2 + 30
@@ -1294,6 +1368,7 @@ export class World {
         if (own >= 0) sources[own].push({ x: o.x, y: o.y, r: SENSORS.outpost * F.radar, sr: 1200 * F.sonar });
       }
     }
+    for (const bo of this.buoys) sources[bo.team].push({ x: bo.x, y: bo.y, r: 0, sr: WEAPONS.sonobuoy.sonar * F.sonar });
     const minVis = 450 * F.vis;
     const det = [new Set(), new Set()];
     for (const e of list) {
@@ -1491,6 +1566,12 @@ export class World {
         pr.ty = p.my;
       }
       this.events.push(["torp", x, y, pr.h]);
+    } else if (W.kind === "buoy") {
+      if (st.n <= 0) return;
+      st.n--;
+      st.cd = W.interval;
+      this.buoys.push({ team: p.team, x: b.x, y: b.y, t: this.tick });
+      this.events.push(["buoy", b.x, b.y]);
     } else if (W.kind === "jam") {
       st.act = W.duration;
       st.cd = W.duration + W.reload;
@@ -1520,7 +1601,7 @@ export class World {
         x = b.x + R.x * c - R.y * s;
         y = b.y + R.x * s + R.y * c;
         a = toMouse;
-      } else if (def.vls && w === "sm2") {
+      } else if (def.vls && W.vls) {
         // Senkrechtstart aus dem VLS
         x = b.x + c * def.vls.x - s * def.vls.y;
         y = b.y + s * def.vls.x + c * def.vls.y;
@@ -1740,6 +1821,7 @@ export class World {
       }
     }
     this.rafts = this.rafts.filter((r) => !r.done && this.tick - r.t < RAFT_LIFE * TICK_RATE);
+    this.buoys = this.buoys.filter((bo) => this.tick - bo.t < WEAPONS.sonobuoy.life * TICK_RATE && !isOnLand(this.map, bo.x, bo.y));
 
     // Schiffe kollidieren (Luftfahrzeuge fliegen darüber)
     // Getauchte U-Boote tauchen unter Schiffen hindurch
@@ -1848,6 +1930,7 @@ export class World {
           rf: rafts,
           fr,
           env: this.envRow(),
+          bo: this.buoys.filter((bo) => bo.team === team).map((bo) => [r(bo.x, 10), r(bo.y, 10), r(1 - (this.tick - bo.t) / (WEAPONS.sonobuoy.life * TICK_RATE))]),
           mk: marked,
           me: {
             w,

@@ -125,3 +125,10 @@ ABILITY_UI.decoy = {
   title: "Torpedotäuschkörper: lenkt anlaufende Torpedos mit 70 % Wahrscheinlichkeit ab",
   icon: svg('<circle cx="10" cy="12" r="4" fill="#bfe6ff" opacity=".8"/><circle cx="18" cy="7" r="2.5" fill="#bfe6ff" opacity=".6"/><circle cx="20" cy="16" r="3" fill="#bfe6ff" opacity=".5"/><circle cx="28" cy="11" r="2" fill="#bfe6ff" opacity=".4"/>'),
 };
+WEAPON_UI.aster15 = { ...WEAPON_UI.ram, name: "Aster 15", sub: "Flugabwehr aus dem VLS" };
+WEAPON_UI.essm = { ...WEAPON_UI.ram, name: "ESSM", sub: "Flugabwehr aus dem VLS" };
+WEAPON_UI.sonobuoy = {
+  name: "Sonarbojen",
+  sub: "abwerfen – 90 s Sonar 2,5 km",
+  icon: svg('<rect x="18" y="4" width="8" height="12" rx="2" fill="#e8a01c"/><circle cx="22" cy="4" r="1.6" fill="#ff5a46"/><path d="M8 19 Q22 14 36 19" stroke="#bfe6ff" stroke-width="1.4" fill="none"/><path d="M4 22 Q22 16 40 22" stroke="#bfe6ff" stroke-width="1" fill="none" opacity=".6"/>'),
+};

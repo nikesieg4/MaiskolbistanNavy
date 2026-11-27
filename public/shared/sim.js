@@ -163,6 +163,49 @@ export const BOATS = {
     alt: { min: 150, max: 6000, cruise: 1800, climb: 12 },
   },
 
+  // ---------------- Flugzeugträger ----------------
+  // airCarrier: Katapultstart und Fangseil-Landung für alle Jets des Teams. deckBeam = Breite des Flugdecks,
+  // beam = Rumpf (Kollision). heliSpots = Abstellplätze (Hubschrauber und Jets, je Platz ein Luftfahrzeug).
+  cdg: {
+    typeId: 18, team: 0, kind: "ship", level: 3, price: 15000, rank: 10,
+    label: "Flugzeugträger Charles de Gaulle (R91)", short: "Flugzeugträger CdG",
+    weapons: ["aster15", "ram"], ability: "radar", heliType: "nh90", carrier: true, airCarrier: true,
+    length: 261, beam: 38, deckBeam: 64, maxSpeed: 13.9, maxReverse: 0.2, accel: 0.5, decel: 0.8, turnRate: 0.06,
+    ram: { x: -122, arc: 150 * DEG, speed: 1.6 },
+    vls: { x: 60, y: 20 },
+    catapult: { x: 42, y: -3 },
+    heliSpots: [104, 88, 72, -6, -26, -46, -66, -86].map((x) => ({ x, y: x > 0 ? 10.5 : 19 })),
+    hp: 600, sensor: 3600, sig: 1.7,
+  },
+  ford: {
+    typeId: 19, team: 1, kind: "ship", level: 3, price: 15000, rank: 10,
+    label: "Flugzeugträger Gerald R. Ford (CVN-78)", short: "Flugzeugträger Ford",
+    weapons: ["essm", "searam"], ability: "radar", heliType: "blackhawk", carrier: true, airCarrier: true,
+    length: 333, beam: 46, deckBeam: 78, maxSpeed: 15.4, maxReverse: 0.2, accel: 0.45, decel: 0.7, turnRate: 0.05,
+    ram: { x: -158, arc: 150 * DEG, speed: 1.6 },
+    vls: { x: -150, y: 26 },
+    catapult: { x: 60, y: -6 },
+    heliSpots: [136, 118, 100, 82, -8, -84, -106, -128, -150].map((x) => ({ x, y: x > 0 ? 13.5 : 25 })),
+    hp: 700, sensor: 3800, sig: 1.8,
+  },
+  // ---------------- Trägergestützte U-Jagd-Drohne ----------------
+  // Bayraktar TB3 (beide Nationen): startet vom Flugfeld oder einem Trägerdeck, wirft Sonarbojen und Leichttorpedos.
+  tb3: {
+    typeId: 20, team: 0, kind: "drone", level: 2, price: 0, rank: 4, carrierDrone: true,
+    label: "Bayraktar TB3 (U-Jagd)", short: "Bayraktar TB3",
+    weapons: ["mu90", "sonobuoy"], ability: "radar",
+    length: 8.35, beam: 14, maxSpeed: 82, minSpeed: 30, maxReverse: 0, accel: 9, decel: 9, turnRate: 0.6,
+    hitRadius: 7, hp: 30, sensor: 3000, sig: 0.4,
+    alt: { min: 50, max: 9000, cruise: 1200, climb: 10 },
+  },
+  tb3p: {
+    typeId: 21, team: 1, kind: "drone", level: 2, price: 0, rank: 4, carrierDrone: true,
+    label: "Bayraktar TB3 (U-Jagd)", short: "Bayraktar TB3",
+    weapons: ["mk54", "sonobuoy"], ability: "radar",
+    length: 8.35, beam: 14, maxSpeed: 82, minSpeed: 30, maxReverse: 0, accel: 9, decel: 9, turnRate: 0.6,
+    hitRadius: 7, hp: 30, sensor: 3000, sig: 0.4,
+    alt: { min: 50, max: 9000, cruise: 1200, climb: 10 },
+  },
   // ---------------- Kampfflugzeuge ----------------
   // Landjäger starten von der Bahn, Senkrechtstarter (vtol) auch vom Trägerdeck.
   eurofighter: {
@@ -229,6 +272,7 @@ export const TYPE_BY_ID = [];
 for (const [k, d] of Object.entries(BOATS)) TYPE_BY_ID[d.typeId] = k;
 export const START_SHIP = ["gepard", "cyclone"];
 export const DRONE_OF = ["heron", "reaper"];
+export const TB3_OF = ["tb3", "tb3p"];
 export const isAir = (def) => def.kind === "heli" || def.kind === "drone" || def.kind === "jet";
 export const isSub = (def) => def.kind === "sub";
 // Kaufbare Fahrzeuge (Laden): Schiffe, U-Boote, Kampfflugzeuge
@@ -247,6 +291,7 @@ export const ECONOMY = {
     if (def.kind === "drone") return 400;
     if (def.kind === "heli") return 600;
     if (def.kind === "jet") return 900 + def.level * 300;
+    if (def.airCarrier) return 5000;
     if (def.carrier) return 3000;
     return [0, 1000, 1800, 3000][def.level] || 1000;
   },
@@ -272,7 +317,9 @@ export const WEAPONS = {
   ram: { ceiling: 3000, kind: "sam", label: "RAM Luftabwehr", magazine: 21, reload: 4, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
   searam: { ceiling: 3000, kind: "sam", label: "SeaRAM", magazine: 11, reload: 3.5, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
   stinger: { ceiling: 3500, kind: "sam", label: "Stinger", magazine: 8, reload: 5, interval: 0.5, speed: 260, turn: 3.6, range: 1100, damage: 3, seekerRange: 1000, pk: 0.6 },
-  sm2: { ceiling: 15000, kind: "sam", label: "SM-2 Standard", magazine: 32, reload: 6, interval: 0.6, speed: 300, turn: 2.2, range: 8000, damage: 8, seekerRange: 3000, pk: 0.75 },
+  sm2: { vls: true, ceiling: 15000, kind: "sam", label: "SM-2 Standard", magazine: 32, reload: 6, interval: 0.6, speed: 300, turn: 2.2, range: 8000, damage: 8, seekerRange: 3000, pk: 0.75 },
+  aster15: { vls: true, ceiling: 13000, kind: "sam", label: "Aster 15", magazine: 32, reload: 6, interval: 0.6, speed: 320, turn: 2.4, range: 5000, damage: 8, seekerRange: 2500, pk: 0.75 },
+  essm: { vls: true, ceiling: 8000, kind: "sam", label: "ESSM", magazine: 32, reload: 5, interval: 0.5, speed: 310, turn: 2.6, range: 4500, damage: 7, seekerRange: 2300, pk: 0.72 },
   mg: { ceiling: 1000, kind: "mg", label: "Türschützen-MG", auto: true, reload: 0.09, speed: 520, range: 800, damage: 0.6, heliDamage: 1.2, spread: 0.035 },
   hellfire: {
     kind: "agm", label: "AGM-114 Hellfire", count: 8, reload: 6, interval: 0.4, speed: 210, turn: 2.4, range: 3000, damage: 14,
@@ -343,6 +390,8 @@ export const WEAPONS = {
   mk48: { kind: "torp", label: "Mk 48 ADCAP", count: 4, reload: 25, interval: 2, speed: 31, turn: 0.42, range: 7000, damage: 70, seekerRange: 1100, seekerCone: 0.7 },
   mu90: { kind: "torp", label: "MU90 Leichttorpedo", count: 2, reload: 35, interval: 1.5, speed: 27, turn: 0.6, range: 3500, damage: 35, seekerRange: 850, seekerCone: 0.8 },
   mk54: { kind: "torp", label: "Mk 54 Leichttorpedo", count: 2, reload: 35, interval: 1.5, speed: 27, turn: 0.6, range: 3500, damage: 35, seekerRange: 850, seekerCone: 0.8 },
+  // Sonarbojen (Drohne TB3): treiben 90 s und hören in 2,5 km Umkreis für das ganze Team
+  sonobuoy: { kind: "buoy", label: "Sonarbojen", count: 6, reload: 25, interval: 1.2, life: 90, sonar: 2500 },
   // Flugabwehr aus dem getauchten U-Boot (nur auf Sehrohrtiefe): jagt nur Luftfahrzeuge
   idas: {
     ceiling: 2500, kind: "sam", airOnly: true, label: "IDAS", magazine: 4, reload: 30, interval: 1, speed: 240, turn: 3, range: 2200, damage: 6,
