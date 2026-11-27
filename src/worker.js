@@ -69,7 +69,7 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 17;
+const WORLD_VERSION = 18;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
 
 // ---------- Konten: Anmeldung ----------
@@ -1330,12 +1330,12 @@ export class World {
     const r = (n, f = 100) => Math.round(n * f) / f;
     const lk = [];
     for (const o of this.players.values()) {
-      if (o.team === p.team || o.lockId !== p.id) continue;
+      if (o === p || o.lockId !== p.id || (o.team === p.team && !this.ffOn)) continue;
       lk.push([r(Math.atan2(o.b.y - p.b.y, o.b.x - p.b.x)), r(o.lockT / WEAPONS.lock.time)]);
     }
     const ms = [];
     for (const q of this.projectiles) {
-      if (q.team === p.team || q.dead) continue;
+      if ((q.team === p.team && !this.ffOn) || q.dead || q.owner === p.id) continue;
       if (q.target !== p.id && q.air !== p.id) continue;
       ms.push([r(Math.atan2(q.y - p.b.y, q.x - p.b.x)), Math.round(Math.hypot(q.x - p.b.x, q.y - p.b.y))]);
     }
@@ -1416,7 +1416,7 @@ export class World {
       if (want === "air") return isAir(d) && !t.landed;
       return true;
     };
-    const ok = (t) => t && kindOk(t) && this.det[p.team].has(t.id) && Math.hypot(t.b.x - p.b.x, t.b.y - p.b.y) < range;
+    const ok = (t) => t && kindOk(t) && this.lockable(p, t) && Math.hypot(t.b.x - p.b.x, t.b.y - p.b.y) < range;
     if (p.lockId && p.lockT >= WEAPONS.lock.time) {
       const t = this.players.get(p.lockId);
       if (ok(t)) return t;
@@ -1426,7 +1426,7 @@ export class World {
     for (const o of this.players.values()) {
       if (o.team !== p.team || o === p || !o.lockId || o.lockT < WEAPONS.lock.time) continue;
       const t = this.players.get(o.lockId);
-      if (!ok(t)) continue;
+      if (!ok(t) || t.team === p.team) continue; // Team-Markierungen nur auf Gegner
       const d = Math.hypot(t.b.x - p.mx, t.b.y - p.my);
       if (d < bestD) {
         bestD = d;
@@ -1690,7 +1690,7 @@ export class World {
     let best = null;
     let bestD = radar || def.kind === "drone" || def.kind === "jet" || isSub(def) ? ABILITIES.radar.pick : L.pick;
     for (const o of this.players.values()) {
-      if (o === p || o.team === p.team || !this.det[p.team].has(o.id)) continue;
+      if (!this.lockable(p, o)) continue;
       const od = BOATS[o.type];
       let d = Infinity;
       if (isAir(od)) d = Math.hypot(o.b.x - x, o.b.y - y) - od.hitRadius;
@@ -1700,7 +1700,7 @@ export class World {
         best = o;
       }
     }
-    if (!best) {
+    if (!best && !this.ffOn) {
       for (const o of this.players.values()) {
         if (o !== p && o.team === p.team && Math.hypot(o.b.x - x, o.b.y - y) < 40 + BOATS[o.type].length / 2) {
           this.send(p.ws, { t: "lockmsg", m: "AGIS: eigenes Fahrzeug – kein Lock" });
@@ -1722,6 +1722,7 @@ export class World {
     }
     p.lockId = best.id;
     p.lockT = 0;
+    if (best.team === p.team) this.send(p.ws, { t: "lockmsg", m: `⚠ AGIS: Lock auf EIGENES Fahrzeug ${best.name}` });
   }
 
   // ---------- Simulation ----------
@@ -1852,7 +1853,7 @@ export class World {
     for (const p of list) {
       if (!p.lockId) continue;
       const t = this.players.get(p.lockId);
-      if (!t || !this.det[p.team].has(t.id) || Math.hypot(t.b.x - p.b.x, t.b.y - p.b.y) > WEAPONS.lock.breakRange) {
+      if (!t || !this.lockable(p, t) || Math.hypot(t.b.x - p.b.x, t.b.y - p.b.y) > WEAPONS.lock.breakRange) {
         p.lockId = 0;
         p.lockT = 0;
         this.send(p.ws, { t: "lockmsg", m: "AGIS: Ziel verloren" });
@@ -1923,7 +1924,7 @@ export class World {
       };
       const proj = this.projectiles.filter(near).map((q) => [q.id, q.type, r(q.x, 10), r(q.y, 10), r(q.h), Math.round(q.z || 0), q.burnt ? 0 : 1]);
       // Vom Team markierte Ziele (Locks aller Teammitglieder)
-      const marked = [...new Set(members.filter((p) => p.lockId && p.lockT >= WEAPONS.lock.time).map((p) => p.lockId))];
+      const marked = [...new Set(members.filter((p) => p.lockId && p.lockT >= WEAPONS.lock.time && this.players.get(p.lockId)?.team !== team).map((p) => p.lockId))];
       for (const p of members) {
         const def = BOATS[p.type];
         const w = p.weapons.map((k) => {
@@ -2314,6 +2315,15 @@ export class World {
   }
 
   // Treffer möglich? Gegner immer; eigenes Team nur bei Friendly Fire (nie der Schütze selbst)
+  get ffOn() {
+    return !!(this.front && this.front.ff);
+  }
+  // Darf p das Fahrzeug o sehen/aufschalten? Gegner nur wenn erfasst; eigenes Team nur bei Friendly Fire
+  lockable(p, o) {
+    if (!o || o === p) return false;
+    return o.team === p.team ? this.ffOn : this.det[p.team].has(o.id);
+  }
+
   canHit(q, p) {
     return p.team !== q.team || (!!(this.front && this.front.ff) && p.id !== q.owner);
   }

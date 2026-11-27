@@ -184,7 +184,9 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 - **Aus (Standard):** Eigene Einheiten können nicht getroffen werden.
 - **An:**
   - Granaten, MG, Bordkanonen, Raketen, Bomben und Torpedos treffen auch eigene Einheiten, die im Weg sind (nie den Schützen selbst).
-  - Gelenkte Waffen suchen weiterhin nur Gegner (Freund-Feind-Kennung).
+  - **Lock auf eigene Einheiten:** Mit **R** lassen sich jetzt auch eigene Einheiten aufschalten, mit dem Hinweis „Lock auf EIGENES Fahrzeug“. Gelenkte Waffen fliegen auf das gelockte Ziel. Der Aufgeschaltete bekommt Lock- und Raketenwarnung.
+  - Ohne Lock suchen Suchköpfe weiterhin nur Gegner. Team-Markierungen gelten nur für Gegner.
+  - Wird Friendly Fire ausgeschaltet, fallen Locks auf eigene Einheiten sofort weg.
   - Eigenbeschuss bringt keine Taler, keinen Abschuss und kein Kopfgeld. Der Getroffene sieht „von X (Eigenbeschuss)“.
   - Hafen und eigenes Flugfeld bleiben sicher.
 

@@ -169,7 +169,7 @@ const TABS = {
       ["Wetter und Tageszeit", "Ein Tag dauert 24 Minuten, das Wetter wechselt alle 8 Minuten. Nacht und Nebel verkürzen die Sicht, Regen und Sturm schwächen Radar, Sturm auch Sonar und bremst Schiffe."],
       ["Träger", "Jedes Landedeck trägt ein Luftfahrzeug, bis es zerstört ist. Auf Flugzeugträgern starten alle Jets per Katapult und landen am Fangseil (langsam unter 60 m)."],
       ["Dienstgrade und Saison", "Erfahrung = ein Zehntel der verdienten Taler. Höhere Dienstgrade schalten Fahrzeuge frei. Am Ende jeder Woche gewinnt das Team mit mehr Stützpunkten; Beitragende bekommen eine Medaille."],
-      ["Friendly Fire", "Ist es eingeschaltet (Anzeige im HUD), treffen Granaten, Raketen, Bomben und Torpedos auch eigene Einheiten, die im Weg sind. Gelenkte Waffen suchen trotzdem nur Gegner. Eigenbeschuss bringt kein Kopfgeld."],
+      ["Friendly Fire", "Ist es eingeschaltet (Anzeige im HUD), treffen Granaten, Raketen, Bomben und Torpedos auch eigene Einheiten, die im Weg sind. Mit R lassen sich dann auch eigene Einheiten aufschalten; gelenkte Waffen fliegen auf das gelockte Ziel, ihr Suchkopf sucht aber von sich aus nur Gegner. Eigenbeschuss bringt kein Kopfgeld."],
     ]),
 };
 
