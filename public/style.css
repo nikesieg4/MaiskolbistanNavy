@@ -299,3 +299,42 @@ body.missileAlert::after { content: ""; position: fixed; inset: 0; pointer-event
 #announce[hidden] { display: none; }
 body.twoBtns #hangarBtn { transform: translateX(calc(-100% - 6px)); }
 body.twoBtns #shopBtn { transform: translateX(6px); }
+
+/* Menü-, Einstellungs-Knopf (wie Chat-Knopf) */
+.sideBtn { position: fixed; right: 12px; width: 52px; height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,.35);
+  background: rgba(10,25,40,.72); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; touch-action: manipulation; }
+.sideBtn svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; pointer-events: none; }
+#menuBtn { bottom: 464px; }
+#setBtn { bottom: 404px; }
+#ffBadge { top: 50px; right: 12px; padding: 4px 10px; border-radius: 8px; background: rgba(239,75,58,.9); color: #fff; font-weight: 800; font-size: 12px; }
+#ffBadge[hidden] { display: none; }
+.overlay { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(0,0,0,.5); padding: 16px; }
+.overlay[hidden] { display: none; }
+.menucard { display: flex; flex-direction: column; gap: 10px; width: min(380px, 100%); }
+.menucard button, .menulinks button, .mantabs button, #setReset { font: inherit; font-size: 15px; font-weight: 700; padding: 10px 14px; border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #eaf2f7; cursor: pointer; }
+.menucard button:hover, .menulinks button:hover, .mantabs button:hover { background: rgba(255,255,255,.16); }
+.menucard button.warn { border-color: #ef4b3a; color: #ffb3a6; }
+.menulinks { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+.menulinks button { font-size: 13px; padding: 7px 12px; }
+.mancard { width: min(1200px, 100%); max-height: 90vh; display: flex; flex-direction: column; }
+.mantabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.mantabs button { font-size: 13px; padding: 7px 12px; }
+.mantabs button.sel { background: #ffd75e; color: #10202e; border-color: #ffd75e; }
+#manBody { overflow: auto; flex: 1; text-align: left; }
+.mantablewrap { overflow-x: auto; }
+.mantable { border-collapse: collapse; font-size: 12px; min-width: 900px; }
+.mantable th { position: sticky; top: 0; background: #0f2b44; color: #ffd75e; text-align: left; padding: 6px 8px; white-space: nowrap; }
+.mantable td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+.mantable tr:nth-child(odd) td { background: rgba(255,255,255,.03); }
+.mantable td:first-child { font-weight: 700; white-space: nowrap; }
+.mantext h4 { margin: 12px 0 4px; color: #ffd75e; }
+.mantext p { margin: 0; line-height: 1.5; font-size: 14px; }
+.setcard { width: min(520px, 100%); max-height: 90vh; overflow: auto; }
+#setList { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; text-align: left; margin-bottom: 12px; }
+#setList label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+#setList input { width: 18px; height: 18px; accent-color: #ffd75e; }
+/* Ausgeblendete UI-Teile */
+body.hide-status #topleft, body.hide-players #players, body.hide-minimap #minimap, body.hide-telegraph #telegraph,
+body.hide-help #help, body.hide-front #frontHud, body.hide-chat #chat, body.hide-chat #chatBtn, body.hide-zoom #zoomBtns,
+body.hide-rwr #rwr, body.hide-toasts #toasts, body.hide-weapons #weapons, body.hide-capture #capture { display: none !important; }

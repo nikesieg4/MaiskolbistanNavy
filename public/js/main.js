@@ -36,6 +36,7 @@ import {
 import { drawCloudShadows, drawWhitecaps, drawAtmosphere, envLabel } from "./weather.js";
 import { initAccount, renderAccount } from "./account.js";
 import { initAdmin, onAdminMessage, closeAdmin, adminOpen } from "./admin.js";
+import { renderManual } from "./manual.js";
 import { drawBases, drawBasesMinimap } from "./base.js";
 import * as radar from "./radar.js";
 import { drawVehicle, drawAirShadow, exhaustsOf } from "./vehicles.js";
@@ -213,6 +214,11 @@ addEventListener("keydown", (e) => {
   if (!state.playing) return;
   if (e.target && ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return; // Chat, Admin-Menü
   if (e.key === "Escape" && adminOpen()) return closeAdmin();
+  if (e.key === "Escape") {
+    // Offenes Fenster schließen, sonst das Spielmenü öffnen
+    for (const id of ["manual", "settings", "gameMenu"]) if (!$(id).hidden) return ($(id).hidden = true);
+    if (!state.hangarOpen && !state.shopOpen) return openOverlay("gameMenu");
+  }
   if (e.key === "Enter" && !e.repeat) {
     e.preventDefault();
     openChat();
@@ -247,6 +253,86 @@ addEventListener(
   },
   { passive: true }
 );
+
+// ---------------- Spielmenü, Handbuch, Einstellungen ----------------
+function openOverlay(id) {
+  for (const o of ["manual", "settings", "gameMenu"]) $(o).hidden = o !== id;
+  if (id === "manual") renderManual($("manBody"), $("manTabs"));
+  if (id === "settings") renderSettings();
+  keys.clear();
+}
+const UI_PARTS = [
+  ["status", "Statusanzeige (oben links)"],
+  ["players", "Flottenliste"],
+  ["minimap", "Minikarte"],
+  ["weapons", "Waffenleiste"],
+  ["telegraph", "Maschinentelegraf"],
+  ["help", "Tastenhilfe"],
+  ["front", "Frontanzeige"],
+  ["capture", "Eroberungsbalken"],
+  ["chat", "Chat"],
+  ["zoom", "Zoom-Knöpfe"],
+  ["rwr", "Radarwarnanlage"],
+  ["toasts", "Meldungen (Taler, Eroberung)"],
+  ["names", "Namensschilder"],
+  ["weather", "Wetter-Effekte (Regen, Nebel, Nacht)"],
+];
+let hidden = new Set();
+try {
+  hidden = new Set(JSON.parse(localStorage.getItem("mkn-hide") || "[]"));
+} catch {}
+const uiHidden = (k) => hidden.has(k);
+function applySettings() {
+  for (const [k] of UI_PARTS) document.body.classList.toggle(`hide-${k}`, hidden.has(k));
+  try {
+    localStorage.setItem("mkn-hide", JSON.stringify([...hidden]));
+  } catch {}
+}
+function renderSettings() {
+  const box = $("setList");
+  box.replaceChildren();
+  for (const [k, label] of UI_PARTS) {
+    const l = document.createElement("label");
+    const c = document.createElement("input");
+    c.type = "checkbox";
+    c.checked = !hidden.has(k);
+    c.onchange = () => {
+      if (c.checked) hidden.delete(k);
+      else hidden.add(k);
+      applySettings();
+    };
+    l.append(c, document.createTextNode(label));
+    box.appendChild(l);
+  }
+}
+applySettings();
+$("menuBtn").onclick = () => openOverlay("gameMenu");
+$("setBtn").onclick = () => openOverlay("settings");
+$("gmResume").onclick = () => ($("gameMenu").hidden = true);
+$("gmManual").onclick = () => openOverlay("manual");
+$("gmSettings").onclick = () => openOverlay("settings");
+$("gmLeave").onclick = () => {
+  $("gameMenu").hidden = true;
+  state.leaving = true;
+  const ws = state.ws;
+  // Direkt ins Startmenü, ohne auf die Bestätigung des Servers zu warten
+  if (ws && state.finishWs) state.finishWs();
+  if (ws) {
+    ws.onclose = null;
+    try {
+      ws.close();
+    } catch {}
+  }
+};
+$("mmManual").onclick = () => openOverlay("manual");
+$("mmSettings").onclick = () => openOverlay("settings");
+$("manClose").onclick = () => ($("manual").hidden = true);
+$("setClose").onclick = () => ($("settings").hidden = true);
+$("setReset").onclick = () => {
+  hidden.clear();
+  applySettings();
+  renderSettings();
+};
 
 // ---------------- Chat ----------------
 const chat = { open: false, team: false, last: 0 };
@@ -466,7 +552,7 @@ function connect(name, team, spawn, loc) {
 
   ws.onopen = () => ws.send(JSON.stringify({ t: "join", name, team, spawn, loc, token: TOKEN }));
   ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
-  ws.onclose = () => {
+  const finish = () => {
     if (state.ws !== ws) return;
     state.ws = null;
     const dead = state.dead;
@@ -482,13 +568,18 @@ function connect(name, team, spawn, loc) {
         ? dead.by
           ? `${verb} von ${dead.by}. Neuer Einsatz gefällig?`
           : `${verb}. Neuer Einsatz gefällig?`
-        : "Verbindung zum Hafen verloren. Erneut ablegen?";
+        : state.leaving
+          ? "Zurück im Hafen. Bereit für den nächsten Einsatz?"
+          : "Verbindung zum Hafen verloren. Erneut ablegen?";
+      state.leaving = false;
       toggleShop(false);
       refreshTeamStatus(true);
     };
     if (dead) setTimeout(showMenu, Math.max(0, 3200 - (performance.now() - dead.time)));
     else showMenu();
   };
+  ws.onclose = finish;
+  state.finishWs = finish;
 }
 
 function onMessage(m) {
@@ -651,6 +742,7 @@ function onSnapshot(m) {
     state.landed = !!m.me.ld;
   }
   if (m.fr) state.front = m.fr;
+  $("ffBadge").hidden = !m.ff;
   if (m.env) {
     state.env = { h: m.env[0], w: m.env[1], p: m.env[2], k: m.env[3] };
     state.envF = envFactors(state.env);
@@ -1450,7 +1542,7 @@ function render(now) {
   }
 
   // Tageszeit und Wetter: Nacht mit Lichtquellen, Nebel, Regen
-  if (F.night > 0.02 || F.fog > 0.05 || F.rain > 0.05 || F.cloud > 0.5) {
+  if (!uiHidden("weather") && (F.night > 0.02 || F.fog > 0.05 || F.rain > 0.05 || F.cloud > 0.5)) {
     const toS = (x, y) => ({ sx: w / 2 + (x - cam.x) * zoom, sy: h / 2 + (y - cam.y) * zoom });
     const lights = [];
     for (const b of boats) {
@@ -1485,7 +1577,7 @@ function render(now) {
     };
     radar.drawRadar(ctx, state.radarView);
   }
-  if (rk < 0.6) for (const b of boats) {
+  if (rk < 0.6 && !uiHidden("names")) for (const b of boats) {
     const sx = w / 2 + (b.x - cam.x) * zoom;
     const bdef = BOATS[b.type];
     const sy = h / 2 + (b.y - cam.y) * zoom - Math.max(24, Math.max(bdef.length * 0.55, bdef.beam * 0.6) * zoom);

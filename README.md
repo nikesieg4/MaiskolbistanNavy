@@ -178,6 +178,26 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
   - Wetter und Uhrzeit festlegen oder wieder automatisch.
   - Ansage an alle.
   - Stützpunkte einzeln setzen, Frontkarte zurücksetzen, alle Geschosse löschen.
+  - **Friendly Fire** an/aus. Die Einstellung bleibt gespeichert, alle bekommen eine Ansage, und im HUD steht „Friendly Fire AN“.
+
+## Friendly Fire
+- **Aus (Standard):** Eigene Einheiten können nicht getroffen werden.
+- **An:**
+  - Granaten, MG, Bordkanonen, Raketen, Bomben und Torpedos treffen auch eigene Einheiten, die im Weg sind (nie den Schützen selbst).
+  - Gelenkte Waffen suchen weiterhin nur Gegner (Freund-Feind-Kennung).
+  - Eigenbeschuss bringt keine Taler, keinen Abschuss und kein Kopfgeld. Der Getroffene sieht „von X (Eigenbeschuss)“.
+  - Hafen und eigenes Flugfeld bleiben sicher.
+
+## Menü, Handbuch, Einstellungen
+- **Menü:** Knopf ☰ rechts oder **Esc**: Weiterspielen, Handbuch, Einstellungen, Zurück zum Hafen (Startmenü).
+- **Handbuch:** auch im Startmenü. Die Werte kommen direkt aus den Spieldaten.
+  - **Waffen:** Art, Reichweite, Geschwindigkeit, maximale Höhe bzw. Zielart, Schaden, Magazin und Nachladen, Antrieb (Brenndauer, Mindestgeschwindigkeit), Lenkung, Träger.
+  - **Fahrzeuge:** Nation, Art, Dienstgrad, Preis, HP, Höchstfahrt, Sensor/Sonar, Signatur, Höhe/Tiefe, Bewaffnung.
+  - **Steuerung** und **Regeln**.
+- **Einstellungen:** Knopf ⚙ rechts. Folgendes lässt sich einzeln ausblenden (gespeichert im Browser):
+  - Statusanzeige, Flottenliste, Minikarte, Waffenleiste, Maschinentelegraf, Tastenhilfe
+  - Frontanzeige, Eroberungsbalken, Chat, Zoom-Knöpfe, Radarwarnanlage, Meldungen
+  - Namensschilder, Wetter-Effekte
 
 ## Landedecks und Hubschrauber-Start
 - Hubschrauber wählen beim Start, wo sie erscheinen: Flugfeld (unbegrenzt) oder ein Schiff des eigenen Teams mit Landedeck.
@@ -245,6 +265,7 @@ Luft-Luft-Suchköpfe suchen ständig im Kegel nach vorn, auch auf dem Weg zum Zi
 | + / − | Zoomen (auch Mausrad, Knöpfe rechts unten fürs iPad, Zwei-Finger-Pinch) |
 | B | Laden (im eigenen Hafen oder gelandet auf dem Flugfeld) |
 | Mausrad | Zoom |
+| Esc | Menü (Handbuch, Einstellungen, Zurück zum Hafen) |
 
 ## Waffen
 | Waffe | Wirkung |

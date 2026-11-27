@@ -99,6 +99,9 @@
         <input id="chatInput" maxlength="140" placeholder="Nachricht … (Enter senden, Esc schließen)" enterkeyhint="send" />
       </form>
     </div>
+    <div id="ffBadge" hidden>⚠ Friendly Fire AN</div>
+    <button id="menuBtn" class="sideBtn" type="button" aria-label="Menü" title="Menü (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <button id="setBtn" class="sideBtn" type="button" aria-label="Einstellungen" title="Einstellungen"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
     <button id="chatBtn" type="button" aria-label="Chat öffnen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3.5V17H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/></svg></button>
     <div id="shop" hidden>
       <div class="shopcard">
@@ -174,7 +177,34 @@
         <input id="name" maxlength="16" placeholder="Dein Name" autocomplete="off" />
         <button id="play" type="submit">Ablegen!</button>
       </form>
+      <div class="menulinks"><button type="button" id="mmManual">📖 Handbuch</button><button type="button" id="mmSettings">⚙ Einstellungen</button></div>
       <p id="status" class="status"></p>
+    </div>
+  </div>
+
+  <!-- Spielmenü, Handbuch, Einstellungen (auch aus dem Startmenü erreichbar) -->
+  <div id="gameMenu" class="overlay" hidden>
+    <div class="shopcard menucard">
+      <h2>Menü</h2>
+      <button type="button" id="gmResume">▶ Weiterspielen</button>
+      <button type="button" id="gmManual">📖 Handbuch</button>
+      <button type="button" id="gmSettings">⚙ Einstellungen</button>
+      <button type="button" id="gmLeave" class="warn">⚓ Zurück zum Hafen (Startmenü)</button>
+    </div>
+  </div>
+  <div id="manual" class="overlay" hidden>
+    <div class="shopcard mancard">
+      <div class="shophead"><h2>📖 Handbuch</h2><button type="button" id="manClose">Schließen</button></div>
+      <div id="manTabs" class="mantabs"></div>
+      <div id="manBody"></div>
+    </div>
+  </div>
+  <div id="settings" class="overlay" hidden>
+    <div class="shopcard setcard">
+      <div class="shophead"><h2>⚙ Einstellungen</h2><button type="button" id="setClose">Schließen</button></div>
+      <p class="shophint">Blende Teile der Oberfläche aus. Die Auswahl wird in diesem Browser gespeichert.</p>
+      <div id="setList"></div>
+      <button type="button" id="setReset">Alles wieder einblenden</button>
     </div>
   </div>
 

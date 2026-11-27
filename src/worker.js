@@ -69,7 +69,7 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 16;
+const WORLD_VERSION = 17;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
 
 // ---------- Konten: Anmeldung ----------
@@ -621,6 +621,7 @@ export class World {
       wx: this.wxOverride || null,
       env: this.envRow(),
       front: this.front ? this.front.own : [],
+      ff: !!(this.front && this.front.ff),
       season: this.front ? this.front.season : 0,
     });
   }
@@ -707,6 +708,12 @@ export class World {
       this.frontDirty = true;
       this.flushFront();
       say("Frontkarte zurückgesetzt");
+    } else if (a === "ff" && this.front) {
+      this.front.ff = !this.front.ff;
+      this.frontDirty = true;
+      this.flushFront();
+      this.broadcast({ t: "announce", m: `Friendly Fire ist jetzt ${this.front.ff ? "AN – Vorsicht mit eigenen Einheiten!" : "AUS"}` });
+      say(`Friendly Fire ${this.front.ff ? "an" : "aus"}`);
     } else if (a === "clearproj") {
       this.projectiles = [];
       say("alle Geschosse entfernt");
@@ -910,6 +917,9 @@ export class World {
     });
 
     const drop = () => {
+      try {
+        ws.close(1000, "Tschüss");
+      } catch {}
       if (player && this.players.get(player.id) === player) {
         this.players.delete(player.id);
         this.broadcast({ t: "leave", id: player.id });
@@ -1934,6 +1944,7 @@ export class World {
           rf: rafts,
           fr,
           env: this.envRow(),
+          ff: this.front && this.front.ff ? 1 : 0,
           bo: this.buoys.filter((bo) => bo.team === team).map((bo) => [r(bo.x, 10), r(bo.y, 10), r(1 - (this.tick - bo.t) / (WEAPONS.sonobuoy.life * TICK_RATE))]),
           mk: marked,
           me: {
@@ -2211,7 +2222,7 @@ export class World {
     // Torpedos: Schiffe und U-Boote (in passender Tiefe)
     if (q.k === "torp") {
       for (const p of this.players.values()) {
-        if (p.team === q.team) continue;
+        if (!this.canHit(q, p)) continue;
         const def = BOATS[p.type];
         if (def.kind !== "ship" && !isSub(def)) continue;
         if (isSub(def) && Math.abs((p.b.z || 0) - q.z) > 80) continue;
@@ -2233,7 +2244,7 @@ export class World {
     if (q.k === "bomb" && q.z <= 0) {
       let hitAny = false;
       for (const p of this.players.values()) {
-        if (p.team === q.team) continue;
+        if (!this.canHit(q, p)) continue;
         const def = BOATS[p.type];
         if (def.kind !== "ship" && !(isSub(def) && (p.b.z || 0) > DEPTH.surface)) continue;
         let d = Infinity;
@@ -2259,7 +2270,7 @@ export class World {
     if (q.k === "gun" || q.k === "mg" || q.k === "jgun") {
       for (const p of this.players.values()) {
         const def = BOATS[p.type];
-        if (p.team === q.team || !isAir(def) || p.landed) continue;
+        if (!this.canHit(q, p) || !isAir(def) || p.landed) continue;
         // Schussweite nach oben: Gipfelhöhe der Waffe (vom Hubschrauber aus zählt der Höhenunterschied)
         const dz = Math.abs((p.b.z || 0) - (q.z || 0));
         if (dz > (W.ceiling || 1000)) continue;
@@ -2274,7 +2285,7 @@ export class World {
     // Treffer an Schiffen (Flugabwehr fliegt über Schiffe hinweg, wenn sie ein Luftziel jagt)
     if (!(q.k === "sam" && (q.target || q.air)) && q.k !== "aam" && q.k !== "torp" && q.k !== "bomb" && ((q.z || 0) < ALTITUDE.hitShip || q.k === "gun" || q.k === "mg" || (q.k === "jgun" && q.z < 800))) {
       for (const p of this.players.values()) {
-        if (p.team === q.team) continue;
+        if (!this.canHit(q, p)) continue;
         const def = BOATS[p.type];
         // Überwasser: Schiffe und aufgetauchte U-Boote
         if (def.kind !== "ship" && !(isSub(def) && (p.b.z || 0) > DEPTH.surface)) continue;
@@ -2300,6 +2311,11 @@ export class World {
       return false;
     }
     return true;
+  }
+
+  // Treffer möglich? Gegner immer; eigenes Team nur bei Friendly Fire (nie der Schütze selbst)
+  canHit(q, p) {
+    return p.team !== q.team || (!!(this.front && this.front.ff) && p.id !== q.owner);
   }
 
   leadPoint(q, b) {
@@ -2389,6 +2405,7 @@ export class World {
     }
     const real = Math.min(dmg, p.hp);
     p.hp -= dmg;
+    const teamHit = attacker && attacker !== p && attacker.team === p.team;
     if (attacker && attacker !== p && attacker.team !== p.team) {
       const d = p.damagers.get(attacker.id) || { dmg: 0, t: 0 };
       d.dmg += real;
@@ -2411,7 +2428,9 @@ export class World {
         if (!isOnLand(this.map, x, y)) this.rafts.push({ id: this.nextRaft++, x, y, t: this.tick });
       }
     }
-    const by = attacker && attacker !== p ? attacker : null;
+    // Eigenbeschuss bringt weder Abschuss noch Kopfgeld
+    const by = attacker && attacker !== p && !teamHit ? attacker : null;
+    if (teamHit) this.send(attacker.ws, { t: "lockmsg", m: `Eigenbeschuss: ${p.name} zerstört!` });
     const bounty = ECONOMY.bounty(def);
     this.stat(p, "deaths");
     if (by) {
@@ -2433,7 +2452,7 @@ export class World {
       if (o.carrierId === p.id) o.carrierId = 0;
     }
     this.players.delete(p.id);
-    this.send(p.ws, { t: "dead", by: by ? by.name : null, x: p.b.x, y: p.b.y, h: p.b.h, team: p.team, type: p.type });
+    this.send(p.ws, { t: "dead", by: by ? by.name : teamHit ? `${attacker.name} (Eigenbeschuss)` : null, x: p.b.x, y: p.b.y, h: p.b.h, team: p.team, type: p.type });
     this.broadcast({ t: "leave", id: p.id, sunkBy: by ? by.id : 0 });
     p.onDeath();
     this.flushAccounts();

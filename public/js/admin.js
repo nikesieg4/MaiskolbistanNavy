@@ -147,6 +147,7 @@ function render() {
       sel([["", "automatisch"], [6, "06:00 Dämmerung"], [12, "12:00 Mittag"], [19.5, "19:30 Abend"], [0, "00:00 Nacht"]], wx.h ?? "", (v) => act("weather", { w: wx.w ?? null, h: v === "" ? null : +v }))
     ),
     row(ann, btn("Senden", () => ann.value.trim() && (act("announce", { text: ann.value }), (ann.value = "")))),
+    row(btn(`Friendly Fire: ${last.ff ? "AN → ausschalten" : "AUS → einschalten"}`, () => act("ff"), last.ff ? "warn" : "")),
     row(btn("Frontkarte zurücksetzen", () => confirm("Alle Stützpunkte neutral setzen?") && act("resetfront"), "warn"), btn("Alle Geschosse löschen", () => act("clearproj")))
   );
   const ops = document.createElement("div");
