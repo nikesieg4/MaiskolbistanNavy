@@ -314,12 +314,12 @@ export const WEAPONS = {
   harpoon: { kind: "ssm", label: "RGM-84 Harpoon", reload: 18, interval: 0.5, speed: 145, turn: 1.0, range: 5000, damage: 45, seekerRange: 1300, seekerCone: 0.6 },
   nsm: { kind: "ssm", label: "Naval Strike Missile", reload: 16, interval: 0.5, speed: 150, turn: 1.4, range: 4800, damage: 42, seekerRange: 1400, seekerCone: 0.7 },
   griffin: { kind: "ssm", label: "Griffin", reload: 8, interval: 0.35, speed: 170, turn: 2.0, range: 2600, damage: 16, seekerRange: 900, seekerCone: 0.6 },
-  ram: { ceiling: 3000, kind: "sam", label: "RAM Luftabwehr", magazine: 21, reload: 4, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
-  searam: { ceiling: 3000, kind: "sam", label: "SeaRAM", magazine: 11, reload: 3.5, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
-  stinger: { ceiling: 3500, kind: "sam", label: "Stinger", magazine: 8, reload: 5, interval: 0.5, speed: 260, turn: 3.6, range: 1100, damage: 3, seekerRange: 1000, pk: 0.6 },
-  sm2: { vls: true, ceiling: 15000, kind: "sam", label: "SM-2 Standard", magazine: 32, reload: 6, interval: 0.6, speed: 300, turn: 2.2, range: 8000, damage: 8, seekerRange: 3000, pk: 0.75 },
-  aster15: { vls: true, ceiling: 13000, kind: "sam", label: "Aster 15", magazine: 32, reload: 6, interval: 0.6, speed: 320, turn: 2.4, range: 5000, damage: 8, seekerRange: 2500, pk: 0.75 },
-  essm: { vls: true, ceiling: 8000, kind: "sam", label: "ESSM", magazine: 32, reload: 5, interval: 0.5, speed: 310, turn: 2.6, range: 4500, damage: 7, seekerRange: 2300, pk: 0.72 },
+  ram: { burn: 3, coastK: 0.12, minV: 90, ceiling: 3000, kind: "sam", label: "RAM Luftabwehr", magazine: 21, reload: 4, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
+  searam: { burn: 3, coastK: 0.12, minV: 90, ceiling: 3000, kind: "sam", label: "SeaRAM", magazine: 11, reload: 3.5, interval: 0.35, speed: 230, turn: 3.2, range: 1800, damage: 6, seekerRange: 1500, pk: 0.7 },
+  stinger: { burn: 2, coastK: 0.15, minV: 80, ceiling: 3500, kind: "sam", label: "Stinger", magazine: 8, reload: 5, interval: 0.5, speed: 260, turn: 3.6, range: 1100, damage: 3, seekerRange: 1000, pk: 0.6 },
+  sm2: { burn: 14, coastK: 0.03, minV: 110, vls: true, ceiling: 15000, kind: "sam", label: "SM-2 Standard", magazine: 32, reload: 6, interval: 0.6, speed: 300, turn: 2.2, range: 8000, damage: 8, seekerRange: 3000, pk: 0.75 },
+  aster15: { burn: 5, coastK: 0.07, minV: 110, vls: true, ceiling: 13000, kind: "sam", label: "Aster 15", magazine: 32, reload: 6, interval: 0.6, speed: 320, turn: 2.4, range: 5000, damage: 8, seekerRange: 2500, pk: 0.75 },
+  essm: { burn: 5, coastK: 0.07, minV: 110, vls: true, ceiling: 8000, kind: "sam", label: "ESSM", magazine: 32, reload: 5, interval: 0.5, speed: 310, turn: 2.6, range: 4500, damage: 7, seekerRange: 2300, pk: 0.72 },
   mg: { ceiling: 1000, kind: "mg", label: "Türschützen-MG", auto: true, reload: 0.09, speed: 520, range: 800, damage: 0.6, heliDamage: 1.2, spread: 0.035 },
   hellfire: {
     kind: "agm", label: "AGM-114 Hellfire", count: 8, reload: 6, interval: 0.4, speed: 210, turn: 2.4, range: 3000, damage: 14,
@@ -341,6 +341,7 @@ export const WEAPONS = {
   },
   // Hangar-Bewaffnung für Hubschrauber
   stinger_aa: {
+    burn: 2, coastK: 0.15, minV: 80,
     ceiling: 3500, kind: "sam", label: "Stinger (Luft-Luft)", magazine: 4, reload: 10, interval: 0.6, speed: 260, turn: 3.6, range: 1300, damage: 3,
     seekerRange: 1100, pk: 0.65, rails: [{ x: -0.5, y: -2.6 }, { x: -0.5, y: 2.6 }],
   },
@@ -357,18 +358,21 @@ export const WEAPONS = {
   gau22: { kind: "jgun", label: "25 mm GAU-22/A", auto: true, reload: 0.06, speed: 900, range: 1400, damage: 1.1, airDamage: 2.6, spread: 0.012, ceiling: 200 },
   // Luft-Luft-Flugkörper. ir = Infrarot (Täuschkörper wirken stark), sonst Radar (braucht Lock für große Reichweite)
   iris_t: {
+    burn: 3, coastK: 0.1, minV: 150,
     kind: "aam", ir: true, label: "IRIS-T", count: 2, reload: 40, interval: 0.6, speed: 650, turn: 3.0, range: 2600, damage: 30,
     seekerRange: 2200, seekerCone: 0.9, rails: [{ x: -4.9, y: -5.6 }, { x: -4.9, y: 5.6 }],
   },
   aim9x: {
+    burn: 3, coastK: 0.1, minV: 150,
     kind: "aam", ir: true, label: "AIM-9X Sidewinder", count: 2, reload: 40, interval: 0.6, speed: 640, turn: 3.0, range: 2500, damage: 30,
     seekerRange: 2100, seekerCone: 0.9, rails: [{ x: -2.4, y: -4.9 }, { x: -2.4, y: 4.9 }],
   },
   meteor: {
-    kind: "aam", label: "Meteor", count: 2, reload: 50, interval: 0.8, speed: 720, turn: 2.0, range: 6500, damage: 40,
+    kind: "aam", label: "Meteor", count: 2, reload: 50, interval: 0.8, speed: 720, turn: 3.0, range: 9500, damage: 40,
     seekerRange: 2600, seekerCone: 0.7, rails: [{ x: -2.3, y: -3.2 }, { x: -2.3, y: 3.2 }],
   },
   aim120: {
+    burn: 6, coastK: 0.06, minV: 180,
     kind: "aam", label: "AIM-120 AMRAAM", count: 2, reload: 50, interval: 0.8, speed: 680, turn: 2.1, range: 5500, damage: 40,
     seekerRange: 2400, seekerCone: 0.7, rails: [{ x: -1.8, y: -3.2 }, { x: -1.8, y: 3.2 }],
   },
@@ -394,6 +398,7 @@ export const WEAPONS = {
   sonobuoy: { kind: "buoy", label: "Sonarbojen", count: 6, reload: 25, interval: 1.2, life: 90, sonar: 2500 },
   // Flugabwehr aus dem getauchten U-Boot (nur auf Sehrohrtiefe): jagt nur Luftfahrzeuge
   idas: {
+    burn: 4, coastK: 0.1, minV: 90,
     ceiling: 2500, kind: "sam", airOnly: true, label: "IDAS", magazine: 4, reload: 30, interval: 1, speed: 240, turn: 3, range: 2200, damage: 6,
     seekerRange: 1800, pk: 0.7, rails: [{ x: 8, y: 0 }],
   },

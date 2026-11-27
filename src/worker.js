@@ -69,7 +69,7 @@ const SPAWN_PROTECTION = 4; // s
 // Bei Protokolländerungen erhöhen: Laufende Durable Objects behalten nach einem Deploy
 // ihren alten Code, solange Spieler verbunden sind. Neue Verbindungen landen so in einer frischen Welt.
 // Konten und Frontkarte liegen in eigenen, versionsunabhängigen Durable Objects ("konten", "front").
-const WORLD_VERSION = 15;
+const WORLD_VERSION = 16;
 const TOKEN_RE = /^[A-Za-z0-9-]{16,64}$/;
 
 // ---------- Konten: Anmeldung ----------
@@ -1907,7 +1907,7 @@ export class World {
         for (const s of this.sources[team]) if (Math.hypot(q.x - s.x, q.y - s.y) < (q.k === "torp" ? s.sr : s.r)) return true;
         return false;
       };
-      const proj = this.projectiles.filter(near).map((q) => [q.id, q.type, r(q.x, 10), r(q.y, 10), r(q.h), Math.round(q.z || 0)]);
+      const proj = this.projectiles.filter(near).map((q) => [q.id, q.type, r(q.x, 10), r(q.y, 10), r(q.h), Math.round(q.z || 0), q.burnt ? 0 : 1]);
       // Vom Team markierte Ziele (Locks aller Teammitglieder)
       const marked = [...new Set(members.filter((p) => p.lockId && p.lockT >= WEAPONS.lock.time).map((p) => p.lockId))];
       for (const p of members) {
@@ -1955,10 +1955,33 @@ export class World {
     }
   }
 
+  // Feststoff-Raketen (vor allem Flugabwehr und Luft-Luft): Schub nur während der Brenndauer, danach
+  // Gleitflug mit Luftwiderstand. Langsamer = weniger Ruderwirkung. Gibt den Lenkfaktor (0.2–1) zurück
+  // oder 0, wenn die Rakete zu langsam ist und sich selbst zerstört.
+  missileEnergy(q, W) {
+    q.age = (q.age || 0) + DT;
+    if (q.age <= W.burn) {
+      q.v = Math.min(W.speed, q.v + (W.speed / Math.max(1, W.burn * 0.5)) * DT);
+    } else {
+      q.burnt = true;
+      q.v *= Math.exp(-W.coastK * DT);
+      if (q.v < W.minV) return 0;
+    }
+    return clamp(Math.pow(q.v / W.speed, 1.5), 0.2, 1);
+  }
+
   // Gibt false zurück, wenn der Flugkörper verschwindet.
   stepProjectile(q) {
     const owner = this.players.get(q.owner);
     const W = WEAPONS[q.w];
+    let steer = 1;
+    if (W.burn) {
+      steer = this.missileEnergy(q, W);
+      if (steer === 0) {
+        this.events.push(["air", q.x, q.y]); // Energie aufgebraucht: Selbstzerstörung
+        return false;
+      }
+    }
     // Störung: gelenkte Flugkörper in der Nähe eines gegnerischen Störers können ihr Ziel verlieren
     const radarAam = q.k === "aam" && !W.ir;
     if ((q.k === "ssm" || q.k === "agm" || q.k === "sam" || radarAam) && (q.target || q.air) && this.jammedAt(q.x, q.y, q.team, "lockRadius")) {
@@ -1972,20 +1995,24 @@ export class World {
     if (q.jamUntil && this.tick < q.jamUntil && q.k !== "arm") {
       // gestört: fliegt geradeaus weiter
     } else if (q.k === "aam") {
-      q.v = Math.min(W.speed, q.v + 260 * DT);
+      if (!W.burn) q.v = Math.min(W.speed, q.v + 260 * DT); // Staustrahl (Meteor): hält die Geschwindigkeit
       let t = q.air ? this.players.get(q.air) : null;
       if (t && (t.landed || (W.ir && this.flaresOn(t) && Math.random() < 0.2))) t = null;
       if (!t && q.air) q.air = 0;
-      if (!t && q.tx === null) {
+      // Suchkopf sucht laufend im Kegel nach vorn (auch auf dem Weg zum Zielpunkt)
+      if (!t && (q.tx === null || this.tick % 4 === 0)) {
         t = this.seekAir(q, q.h, W.seekerRange, W.seekerCone);
-        if (t) q.air = t.id;
+        if (t) {
+          q.air = t.id;
+          q.tx = q.ty = null;
+        }
       }
       if (t) {
         const g = this.leadPoint(q, t.b);
-        this.turnTowards(q, g.x, g.y, W.turn);
+        this.turnTowards(q, g.x, g.y, W.turn * steer);
       } else if (q.tx !== null) {
         if (Math.hypot(q.tx - q.x, q.ty - q.y) < 200) q.tx = q.ty = null;
-        else this.turnTowards(q, q.tx, q.ty, W.turn);
+        else this.turnTowards(q, q.tx, q.ty, W.turn * steer);
       }
     } else if (q.k === "torp") {
       q.v = Math.min(W.speed, q.v + 8 * DT);
@@ -2066,7 +2093,7 @@ export class World {
         } else this.turnTowards(q, q.tx, q.ty, W.turn);
       }
     } else if (q.k === "sam") {
-      q.v = Math.min(W.speed, q.v + 220 * DT);
+      if (!W.burn) q.v = Math.min(W.speed, q.v + 220 * DT);
       // Suchkopf: gegnerische Flugkörper oder Luftfahrzeuge (Hubschrauber mit Täuschkörpern nicht)
       let tgt = null;
       if (q.target) tgt = this.projectiles.find((o) => o.id === q.target && !o.dead) || null;
@@ -2100,13 +2127,13 @@ export class World {
           }
         }
       }
-      if (tgt) this.turnTowards(q, tgt.x, tgt.y, W.turn);
+      if (tgt) this.turnTowards(q, tgt.x, tgt.y, W.turn * steer);
       else if (q.tx !== null) {
         if (Math.hypot(q.tx - q.x, q.ty - q.y) < 30) {
           this.events.push(["air", q.x, q.y]);
           return false;
         }
-        this.turnTowards(q, q.tx, q.ty, W.turn);
+        this.turnTowards(q, q.tx, q.ty, W.turn * steer);
       }
     }
 
@@ -2138,6 +2165,8 @@ export class World {
       const pitch = Math.atan2(dz, Math.max(1, dh));
       hFactor = Math.cos(pitch);
       q.z += clamp(Math.sin(pitch) * q.v * DT, -Math.abs(dz), Math.abs(dz));
+      // Steigen kostet nach Brennschluss Geschwindigkeit, Sturzflug bringt welche
+      if (W.burn && q.burnt) q.v = Math.max(0, q.v - 9.81 * Math.sin(pitch) * DT);
     }
 
     const px = q.x;

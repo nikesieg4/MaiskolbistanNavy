@@ -789,10 +789,10 @@ function interpolatedProjectiles(br) {
   for (const [id, qb] of b.projs) {
     const qa = a.projs.get(id);
     if (!qa) {
-      out.push({ id, type: qb[1], x: qb[2], y: qb[3], h: qb[4], z: qb[5] || 0 });
+      out.push({ id, type: qb[1], x: qb[2], y: qb[3], h: qb[4], z: qb[5] || 0, burn: qb[6] !== 0 });
       continue;
     }
-    out.push({ id, type: qb[1], x: lerp(qa[2], qb[2], t), y: lerp(qa[3], qb[3], t), h: lerpAngle(qa[4], qb[4], t), z: lerp(qa[5] || 0, qb[5] || 0, t) });
+    out.push({ id, type: qb[1], x: lerp(qa[2], qb[2], t), y: lerp(qa[3], qb[3], t), h: lerpAngle(qa[4], qb[4], t), z: lerp(qa[5] || 0, qb[5] || 0, t), burn: qb[6] !== 0 });
   }
   return out;
 }

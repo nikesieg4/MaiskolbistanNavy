@@ -171,6 +171,7 @@ export function emitTrails(projs, dt) {
   }
   for (const q of projs) {
     if (q.type === PROJ.SHELL || q.type === PROJ.BULLET || q.type === PROJ.TORP || q.type === PROJ.BOMB) continue;
+    if (q.burn === false) continue; // Brennschluss: keine Rauchspur mehr
     let tr = trails.get(q.id);
     if (!tr) trails.set(q.id, (tr = { pts: [], big: q.type === PROJ.EXOCET || q.type === PROJ.ARM }));
     tr.alive = true;
@@ -387,8 +388,8 @@ function drawExocetBody(ctx, t) {
   ctx.fillRect(-0.8, -0.21, 0.06, 0.42);
 }
 
-function drawRamBody(ctx, t) {
-  plume(ctx, -1.3, 0.12, 2.2, t, 2);
+function drawRamBody(ctx, t, burning = true) {
+  if (burning) plume(ctx, -1.3, 0.12, 2.2, t, 2);
   fins(ctx, -0.9, 0.42, 0.45, "#a4adb2");
   body(ctx, -1.3, 1.25, 0.12, "#f4f6f7");
   ctx.fillStyle = "#2c3236";
@@ -457,12 +458,14 @@ export function drawProjectiles(ctx, projs, t, zoom) {
       // Luft-Luft-Flugkörper: schlank, heller Feuerstrahl
       const s2 = 1.1 * boost;
       ctx.scale(s2, s2);
-      ctx.fillStyle = "rgba(255,220,140,0.9)";
-      ctx.beginPath();
-      ctx.moveTo(-1.8, -0.12);
-      ctx.lineTo(-4.5 - Math.random(), 0);
-      ctx.lineTo(-1.8, 0.12);
-      ctx.fill();
+      if (q.burn !== false) {
+        ctx.fillStyle = "rgba(255,220,140,0.9)";
+        ctx.beginPath();
+        ctx.moveTo(-1.8, -0.12);
+        ctx.lineTo(-4.5 - Math.random(), 0);
+        ctx.lineTo(-1.8, 0.12);
+        ctx.fill();
+      }
       ctx.fillStyle = "#eceee9";
       ctx.fillRect(-1.8, -0.09, 3.4, 0.18);
       ctx.fillStyle = "#6b706d";
@@ -502,7 +505,7 @@ export function drawProjectiles(ctx, projs, t, zoom) {
       } else if (q.type === PROJ.HELLFIRE) {
         ctx.scale(0.65, 0.9);
         drawRamBody(ctx, t);
-      } else drawRamBody(ctx, t);
+      } else drawRamBody(ctx, t, q.burn !== false);
     }
     ctx.restore();
   }

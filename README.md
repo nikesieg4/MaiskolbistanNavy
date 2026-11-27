@@ -195,6 +195,30 @@ ein Worker liefert den Client aus, ein Durable Object ist der autoritative Spiel
 - Seezielflugkörper fliegen im Tiefflug, Luft-Boden-Raketen und ARM gleiten zum Ziel hinab, Flugabwehr steigt auf Zielhöhe.
 - Der Schatten auf dem Wasser wandert mit der Höhe, das Namensschild zeigt die Flughöhe.
 
+## Raketen-Energie (Feststoffmotor)
+Flugabwehr- und Luft-Luft-Raketen mit Feststoffmotor verhalten sich wie in echt:
+- **Antrieb:** Schub nur während der Brenndauer, danach Gleitflug mit Luftwiderstand. Die Rauchspur und die Flamme enden mit dem Brennschluss.
+- **Lenkung:** Je langsamer die Rakete, desto schwächer wirken die Ruder; sie lenkt dann schlechter.
+- **Höhe:** Steigen kostet Geschwindigkeit, Sturzflug bringt welche.
+- **Selbstzerstörung:** unter der Mindestgeschwindigkeit.
+- **Folge:** Auf kurze Entfernung treffen sie sicher. Auf große Entfernung kann ein Ziel durch Kurven oder Davonfliegen mit Nachbrenner entkommen.
+
+| Rakete | Brenndauer | Mindestgeschw. |
+|---|---|---|
+| RAM, SeaRAM | 3 s | 90 m/s |
+| Stinger (Schiff und Hubschrauber) | 2 s | 80 m/s |
+| SM-2 (Zweistufenmotor) | 14 s | 110 m/s |
+| Aster 15, ESSM | 5 s | 110 m/s |
+| IDAS | 4 s | 90 m/s |
+| IRIS-T, AIM-9X | 3 s | 150 m/s |
+| AIM-120 AMRAAM | 6 s | 180 m/s |
+
+Nicht betroffen:
+- **Meteor:** Der Staustrahlantrieb hält die Geschwindigkeit; sie hat deshalb mehr Reichweite (9,5 km) und eine große No-Escape-Zone.
+- Seezielflugkörper und Marschflugkörper mit Turbinen (Harpoon, NSM, RBS 15, Taurus, JSM, Exocet), Hellfire, ARM, Bomben und Torpedos.
+
+Luft-Luft-Suchköpfe suchen ständig im Kegel nach vorn, auch auf dem Weg zum Zielpunkt.
+
 ## Radarwarnanlage
 - **Lock-Warnung:** gelbe Peilmarke während ein Gegner aufschaltet, blinkendes „⚠ LOCK“ und rote Marke, sobald der Lock steht –
   auch wenn du den Gegner selbst nicht siehst.
